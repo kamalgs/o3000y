@@ -1,0 +1,13 @@
+services:
+  tracequery:
+    build: .
+    ports:
+      - "7070:7070"
+    environment:
+      - DATA_DIR=/data/traces
+      - PORT=7070
+    volumes:
+      - trace-data:/data/traces
+
+volumes:
+  trace-data:
