@@ -30,11 +30,23 @@ public final class QueryRestApi {
   }
 
   public void start() {
-    app = Javalin.create().start(port);
+    app =
+        Javalin.create(
+                config -> {
+                  config.staticFiles.add(
+                      staticFiles -> {
+                        staticFiles.directory = "/static";
+                        staticFiles.hostedPath = "/";
+                      });
+                })
+            .start(port);
 
     app.get("/health", this::handleHealth);
     app.post("/api/v1/query", this::handleQuery);
     app.get("/api/v1/trace/{trace_id}", this::handleGetTrace);
+    app.get("/api/v1/services", this::handleGetServices);
+    app.get("/api/v1/operations", this::handleGetOperations);
+    app.get("/api/v1/search", this::handleSearch);
 
     LOG.info("REST API started on port {}", port);
   }
@@ -151,6 +163,98 @@ public final class QueryRestApi {
     } catch (JsonProcessingException e) {
       LOG.debug("Failed to parse attributes JSON: {}", json);
       return Map.of();
+    }
+  }
+
+  private void handleGetServices(Context ctx) {
+    try {
+      QueryResult result =
+          queryEngine.executeQuery("SELECT DISTINCT service_name FROM spans ORDER BY service_name");
+      List<String> services = new ArrayList<>();
+      for (List<Object> row : result.rows()) {
+        if (!row.isEmpty() && row.getFirst() != null) {
+          services.add(row.getFirst().toString());
+        }
+      }
+      ctx.json(services);
+    } catch (Exception e) {
+      LOG.error("Get services failed", e);
+      ctx.status(500).json(new ErrorResponse("Internal server error: " + e.getMessage(), 500));
+    }
+  }
+
+  private void handleGetOperations(Context ctx) {
+    try {
+      String service = ctx.queryParam("service");
+      String sql;
+      if (service != null && !service.isBlank()) {
+        String sanitized = service.replace("'", "''");
+        sql =
+            "SELECT DISTINCT operation_name FROM spans WHERE service_name = '"
+                + sanitized
+                + "' ORDER BY operation_name";
+      } else {
+        sql = "SELECT DISTINCT operation_name FROM spans ORDER BY operation_name";
+      }
+      QueryResult result = queryEngine.executeQuery(sql);
+      List<String> operations = new ArrayList<>();
+      for (List<Object> row : result.rows()) {
+        if (!row.isEmpty() && row.getFirst() != null) {
+          operations.add(row.getFirst().toString());
+        }
+      }
+      ctx.json(operations);
+    } catch (Exception e) {
+      LOG.error("Get operations failed", e);
+      ctx.status(500).json(new ErrorResponse("Internal server error: " + e.getMessage(), 500));
+    }
+  }
+
+  private void handleSearch(Context ctx) {
+    try {
+      List<String> conditions = new ArrayList<>();
+      String service = ctx.queryParam("service");
+      if (service != null && !service.isBlank()) {
+        conditions.add("service_name = '" + service.replace("'", "''") + "'");
+      }
+      String operation = ctx.queryParam("operation");
+      if (operation != null && !operation.isBlank()) {
+        conditions.add("operation_name = '" + operation.replace("'", "''") + "'");
+      }
+      String minDuration = ctx.queryParam("minDuration");
+      if (minDuration != null && !minDuration.isBlank()) {
+        conditions.add("duration_us >= " + Long.parseLong(minDuration));
+      }
+      String maxDuration = ctx.queryParam("maxDuration");
+      if (maxDuration != null && !maxDuration.isBlank()) {
+        conditions.add("duration_us <= " + Long.parseLong(maxDuration));
+      }
+      String status = ctx.queryParam("status");
+      if (status != null && !status.isBlank()) {
+        int statusCode = "ERROR".equalsIgnoreCase(status) ? 2 : 1;
+        conditions.add("status_code = " + statusCode);
+      }
+      int limit = 100;
+      String limitStr = ctx.queryParam("limit");
+      if (limitStr != null && !limitStr.isBlank()) {
+        limit = Math.min(Integer.parseInt(limitStr), 10_000);
+      }
+
+      StringBuilder sql = new StringBuilder("SELECT * FROM spans");
+      if (!conditions.isEmpty()) {
+        sql.append(" WHERE ").append(String.join(" AND ", conditions));
+      }
+      sql.append(" ORDER BY start_time DESC LIMIT ").append(limit);
+
+      QueryResult result = queryEngine.executeQuery(sql.toString());
+      ctx.json(
+          new QueryResponse(
+              result.columns(), result.rows(), result.rowCount(), result.elapsedMs()));
+    } catch (NumberFormatException e) {
+      ctx.status(400).json(new ErrorResponse("Invalid numeric parameter: " + e.getMessage(), 400));
+    } catch (Exception e) {
+      LOG.error("Search failed", e);
+      ctx.status(500).json(new ErrorResponse("Internal server error: " + e.getMessage(), 500));
     }
   }
 
