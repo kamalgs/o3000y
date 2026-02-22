@@ -7,7 +7,6 @@ import dev.o3000y.storage.api.StorageWriter;
 import dev.o3000y.storage.parquet.ParquetSpanWriter;
 import jakarta.inject.Inject;
 import java.io.IOException;
-import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -60,7 +59,12 @@ public final class LocalStorageWriter implements StorageWriter {
     try {
       Files.createDirectories(partitionDir);
     } catch (IOException e) {
-      throw new UncheckedIOException("Failed to create partition directory: " + partitionDir, e);
+      LOG.error(
+          "Failed to create partition directory: {} — dropping {} spans",
+          partitionDir,
+          spans.size(),
+          e);
+      return;
     }
 
     String fileName =
@@ -76,7 +80,7 @@ public final class LocalStorageWriter implements StorageWriter {
       parquetWriter.write(spans, filePath);
       LOG.info("Wrote {} spans to {}", spans.size(), filePath);
     } catch (IOException e) {
-      throw new UncheckedIOException("Failed to write Parquet file: " + filePath, e);
+      LOG.error("Failed to write Parquet file: {} — dropping {} spans", filePath, spans.size(), e);
     }
   }
 }

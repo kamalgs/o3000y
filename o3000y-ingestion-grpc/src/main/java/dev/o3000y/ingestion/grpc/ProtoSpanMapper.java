@@ -8,8 +8,12 @@ import io.opentelemetry.proto.trace.v1.ResourceSpans;
 import io.opentelemetry.proto.trace.v1.ScopeSpans;
 import java.time.Instant;
 import java.util.*;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public final class ProtoSpanMapper {
+
+  private static final Logger LOG = LoggerFactory.getLogger(ProtoSpanMapper.class);
 
   public List<Span> map(List<ResourceSpans> resourceSpansList) {
     List<Span> result = new ArrayList<>();
@@ -19,6 +23,14 @@ public final class ProtoSpanMapper {
 
       for (ScopeSpans ss : rs.getScopeSpansList()) {
         for (io.opentelemetry.proto.trace.v1.Span protoSpan : ss.getSpansList()) {
+          if (protoSpan.getTraceId().isEmpty() || protoSpan.getSpanId().isEmpty()) {
+            LOG.warn("Skipping span with empty trace_id or span_id");
+            continue;
+          }
+          if (protoSpan.getStartTimeUnixNano() <= 0) {
+            LOG.warn("Skipping span with invalid start time");
+            continue;
+          }
           result.add(mapSpan(protoSpan, serviceName, resourceAttrs));
         }
       }
