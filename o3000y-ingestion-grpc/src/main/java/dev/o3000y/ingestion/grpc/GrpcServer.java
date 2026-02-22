@@ -10,11 +10,17 @@ import org.slf4j.LoggerFactory;
 public final class GrpcServer {
 
   private static final Logger LOG = LoggerFactory.getLogger(GrpcServer.class);
+  private static final int MAX_MESSAGE_SIZE = 16 * 1024 * 1024;
+  private static final int SHUTDOWN_TIMEOUT_SEC = 10;
 
   private final Server server;
 
   public GrpcServer(int port, OtlpTraceService traceService) {
-    this.server = ServerBuilder.forPort(port).addService(traceService).build();
+    this.server =
+        ServerBuilder.forPort(port)
+            .addService(traceService)
+            .maxInboundMessageSize(MAX_MESSAGE_SIZE)
+            .build();
   }
 
   public void start() throws IOException {
@@ -27,8 +33,12 @@ public final class GrpcServer {
   }
 
   public void stop() {
+    LOG.info("Stopping gRPC server...");
     try {
-      server.shutdown().awaitTermination(5, TimeUnit.SECONDS);
+      if (!server.shutdown().awaitTermination(SHUTDOWN_TIMEOUT_SEC, TimeUnit.SECONDS)) {
+        LOG.warn("gRPC server did not terminate in time, forcing shutdown");
+        server.shutdownNow();
+      }
     } catch (InterruptedException e) {
       Thread.currentThread().interrupt();
       server.shutdownNow();

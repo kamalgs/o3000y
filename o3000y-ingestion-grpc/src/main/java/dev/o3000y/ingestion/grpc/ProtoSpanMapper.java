@@ -113,6 +113,14 @@ public final class ProtoSpanMapper {
       case DOUBLE_VALUE -> String.valueOf(value.getDoubleValue());
       case BOOL_VALUE -> String.valueOf(value.getBoolValue());
       case BYTES_VALUE -> TraceId.fromBytes(value.getBytesValue().toByteArray());
+      case ARRAY_VALUE ->
+          value.getArrayValue().getValuesList().stream()
+              .map(this::anyValueToString)
+              .collect(java.util.stream.Collectors.joining(",", "[", "]"));
+      case KVLIST_VALUE ->
+          value.getKvlistValue().getValuesList().stream()
+              .map(kv -> kv.getKey() + "=" + anyValueToString(kv.getValue()))
+              .collect(java.util.stream.Collectors.joining(",", "{", "}"));
       default -> value.toString();
     };
   }

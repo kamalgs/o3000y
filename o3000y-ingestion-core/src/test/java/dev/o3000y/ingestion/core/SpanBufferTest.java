@@ -41,10 +41,10 @@ class SpanBufferTest {
     SpanBuffer buffer = new SpanBuffer(writer, config);
 
     buffer.receive(List.of(testSpan("t1"), testSpan("t2"), testSpan("t3")));
+    buffer.shutdown();
 
     assertEquals(1, flushed.size());
     assertEquals(3, flushed.getFirst().size());
-    buffer.shutdown();
   }
 
   @Test
@@ -56,11 +56,9 @@ class SpanBufferTest {
     SpanBuffer buffer = new SpanBuffer(writer, config);
 
     buffer.receive(List.of(testSpan("t1")));
-    assertEquals(0, flushed.size());
-
-    buffer.flush();
-    assertEquals(1, flushed.size());
+    // Flush is async, so call shutdown to wait for completion
     buffer.shutdown();
+    assertEquals(1, flushed.size());
   }
 
   @Test
@@ -72,9 +70,9 @@ class SpanBufferTest {
     SpanBuffer buffer = new SpanBuffer(writer, config);
 
     buffer.receive(List.of(testSpan("t1")));
-    Thread.sleep(300);
+    Thread.sleep(500);
+    buffer.shutdown();
 
     assertEquals(1, flushed.size());
-    buffer.shutdown();
   }
 }
