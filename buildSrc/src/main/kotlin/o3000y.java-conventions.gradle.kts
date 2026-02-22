@@ -1,6 +1,7 @@
 plugins {
     `java-library`
     id("com.diffplug.spotless")
+    jacoco
 }
 
 java {
@@ -23,6 +24,15 @@ tasks.test {
     useJUnitPlatform()
     testLogging {
         events("passed", "skipped", "failed")
+    }
+    finalizedBy(tasks.jacocoTestReport)
+}
+
+tasks.jacocoTestReport {
+    dependsOn(tasks.test)
+    reports {
+        xml.required.set(true)
+        html.required.set(true)
     }
 }
 

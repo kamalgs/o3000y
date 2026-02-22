@@ -18,5 +18,6 @@ dependencies {
     testImplementation(project(":o3000y-app"))
     testImplementation(libs.archunit.junit5)
     testImplementation(libs.duckdb.jdbc)
+    testImplementation(libs.hadoop.common)
     testImplementation(libs.logback.classic)
 }
