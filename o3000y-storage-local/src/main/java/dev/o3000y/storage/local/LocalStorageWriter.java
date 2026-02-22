@@ -10,7 +10,10 @@ import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicLong;
 import org.slf4j.Logger;
@@ -39,7 +42,19 @@ public final class LocalStorageWriter implements StorageWriter {
   public void write(List<Span> spans) {
     if (spans.isEmpty()) return;
 
-    String partition = partitionStrategy.partitionPath(spans.getFirst().startTime());
+    // Group spans by partition
+    Map<String, List<Span>> byPartition = new LinkedHashMap<>();
+    for (Span span : spans) {
+      String partition = partitionStrategy.partitionPath(span.startTime());
+      byPartition.computeIfAbsent(partition, k -> new ArrayList<>()).add(span);
+    }
+
+    for (Map.Entry<String, List<Span>> entry : byPartition.entrySet()) {
+      writePartition(entry.getKey(), entry.getValue());
+    }
+  }
+
+  private void writePartition(String partition, List<Span> spans) {
     Path partitionDir = config.basePath().resolve(partition);
 
     try {

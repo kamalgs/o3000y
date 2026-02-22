@@ -6,6 +6,7 @@ import dev.o3000y.model.SpanLink;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.time.Instant;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -40,7 +41,12 @@ public final class ParquetSpanWriter {
               + "  optional binary links (UTF8);\n"
               + "}");
 
+  private static final Comparator<Span> SORT_ORDER =
+      Comparator.comparing(Span::serviceName).thenComparing(Span::startTime);
+
   public void write(List<Span> spans, Path outputPath) throws IOException {
+    List<Span> sorted = spans.stream().sorted(SORT_ORDER).toList();
+
     Configuration hadoopConf = new Configuration();
     org.apache.hadoop.fs.Path hadoopPath = new org.apache.hadoop.fs.Path(outputPath.toUri());
 
@@ -49,12 +55,15 @@ public final class ParquetSpanWriter {
     try (ParquetWriter<Group> writer =
         ExampleParquetWriter.builder(hadoopPath)
             .withType(SCHEMA)
-            .withCompressionCodec(CompressionCodecName.SNAPPY)
+            .withCompressionCodec(CompressionCodecName.ZSTD)
+            .withDictionaryEncoding(true)
+            .withRowGroupSize(128L * 1024 * 1024)
+            .withPageSize(1024 * 1024)
             .withWriteMode(ParquetFileWriter.Mode.OVERWRITE)
             .withConf(hadoopConf)
             .build()) {
 
-      for (Span span : spans) {
+      for (Span span : sorted) {
         Group group = groupFactory.newGroup();
         group.add("trace_id", span.traceId());
         group.add("span_id", span.spanId());
