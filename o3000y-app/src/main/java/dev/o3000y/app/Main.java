@@ -20,7 +20,7 @@ public final class Main {
 
   public static void main(String[] args) throws IOException {
     LOG.info("o3000y starting...");
-    AppConfig config = AppConfig.fromDefaults();
+    AppConfig config = AppConfig.fromEnvironment();
 
     Files.createDirectories(config.storage().basePath());
 

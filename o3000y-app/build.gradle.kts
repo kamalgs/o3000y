@@ -1,12 +1,22 @@
 plugins {
     id("o3000y.java-conventions")
     application
+    alias(libs.plugins.shadow)
 }
 
 description = "Application assembly — Guice wiring, Main entry point"
 
 application {
     mainClass.set("dev.o3000y.app.Main")
+}
+
+tasks.jar {
+    archiveClassifier.set("thin")
+}
+
+tasks.shadowJar {
+    archiveClassifier.set("")
+    mergeServiceFiles()
 }
 
 dependencies {
