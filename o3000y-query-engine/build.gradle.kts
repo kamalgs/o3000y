@@ -11,6 +11,6 @@ dependencies {
 
     testImplementation(project(":o3000y-storage-parquet"))
     testImplementation(project(":o3000y-testing-fixtures"))
-    testImplementation(libs.arrow.memory.netty)
+    testImplementation(libs.hadoop.common)
     testImplementation(libs.logback.classic)
 }

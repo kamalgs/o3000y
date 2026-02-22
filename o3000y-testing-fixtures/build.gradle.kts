@@ -9,6 +9,4 @@ dependencies {
     implementation(project(":o3000y-storage-parquet"))
     implementation(libs.opentelemetry.proto)
     implementation(libs.protobuf.java)
-    implementation(libs.arrow.vector)
-    implementation(libs.arrow.memory.netty)
 }

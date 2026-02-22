@@ -36,6 +36,7 @@ arrow-vector = { module = "org.apache.arrow:arrow-vector", version.ref = "arrow"
 arrow-memory-netty = { module = "org.apache.arrow:arrow-memory-netty", version.ref = "arrow" }
 arrow-c-data = { module = "org.apache.arrow:arrow-c-data", version.ref = "arrow" }
 parquet-arrow = { module = "org.apache.parquet:parquet-arrow", version = "1.15.0" }
+parquet-hadoop = { module = "org.apache.parquet:parquet-hadoop", version = "1.15.0" }
 parquet-common = { module = "org.apache.parquet:parquet-common", version = "1.15.0" }
 hadoop-common = { module = "org.apache.hadoop:hadoop-common", version = "3.4.1" }
 

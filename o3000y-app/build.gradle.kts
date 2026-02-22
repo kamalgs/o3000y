@@ -20,7 +20,6 @@ dependencies {
     implementation(project(":o3000y-query-engine"))
     implementation(project(":o3000y-query-rest"))
     implementation(libs.guice)
-    implementation(libs.arrow.memory.netty)
     implementation(libs.slf4j.api)
     runtimeOnly(libs.logback.classic)
 }

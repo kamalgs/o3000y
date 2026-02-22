@@ -18,6 +18,5 @@ dependencies {
     testImplementation(project(":o3000y-app"))
     testImplementation(libs.archunit.junit5)
     testImplementation(libs.duckdb.jdbc)
-    testImplementation(libs.arrow.memory.netty)
     testImplementation(libs.logback.classic)
 }

@@ -11,5 +11,6 @@ dependencies {
     implementation(libs.slf4j.api)
 
     testImplementation(libs.duckdb.jdbc)
+    testImplementation(libs.hadoop.common)
     testImplementation(libs.logback.classic)
 }
