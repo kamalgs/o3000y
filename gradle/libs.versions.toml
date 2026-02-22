@@ -1,0 +1,63 @@
+[versions]
+java = "21"
+guice = "7.0.0"
+grpc = "1.69.0"
+protobuf = "4.29.3"
+arrow = "18.1.0"
+duckdb = "1.2.0"
+javalin = "6.4.0"
+jackson = "2.18.2"
+junit = "5.11.4"
+slf4j = "2.0.16"
+logback = "1.5.15"
+spotless = "7.0.2"
+shadow = "8.1.1"
+archunit = "1.3.0"
+errorprone = "2.36.0"
+errorpronePlugin = "4.1.0"
+jacoco = "0.8.12"
+
+[libraries]
+guice = { module = "com.google.inject:guice", version.ref = "guice" }
+
+grpc-netty-shaded = { module = "io.grpc:grpc-netty-shaded", version.ref = "grpc" }
+grpc-protobuf = { module = "io.grpc:grpc-protobuf", version.ref = "grpc" }
+grpc-stub = { module = "io.grpc:grpc-stub", version.ref = "grpc" }
+grpc-services = { module = "io.grpc:grpc-services", version.ref = "grpc" }
+grpc-testing = { module = "io.grpc:grpc-testing", version.ref = "grpc" }
+grpc-inprocess = { module = "io.grpc:grpc-inprocess", version.ref = "grpc" }
+
+protobuf-java = { module = "com.google.protobuf:protobuf-java", version.ref = "protobuf" }
+protobuf-java-util = { module = "com.google.protobuf:protobuf-java-util", version.ref = "protobuf" }
+
+opentelemetry-proto = { module = "io.opentelemetry.proto:opentelemetry-proto", version = "1.5.0-alpha" }
+
+arrow-vector = { module = "org.apache.arrow:arrow-vector", version.ref = "arrow" }
+arrow-memory-netty = { module = "org.apache.arrow:arrow-memory-netty", version.ref = "arrow" }
+arrow-c-data = { module = "org.apache.arrow:arrow-c-data", version.ref = "arrow" }
+parquet-arrow = { module = "org.apache.parquet:parquet-arrow", version = "1.15.0" }
+parquet-common = { module = "org.apache.parquet:parquet-common", version = "1.15.0" }
+hadoop-common = { module = "org.apache.hadoop:hadoop-common", version = "3.4.1" }
+
+duckdb-jdbc = { module = "org.duckdb:duckdb_jdbc", version.ref = "duckdb" }
+
+javalin = { module = "io.javalin:javalin", version.ref = "javalin" }
+
+jackson-databind = { module = "com.fasterxml.jackson.core:jackson-databind", version.ref = "jackson" }
+jackson-datatype-jsr310 = { module = "com.fasterxml.jackson.datatype:jackson-datatype-jsr310", version.ref = "jackson" }
+
+slf4j-api = { module = "org.slf4j:slf4j-api", version.ref = "slf4j" }
+logback-classic = { module = "ch.qos.logback:logback-classic", version.ref = "logback" }
+
+junit-bom = { module = "org.junit:junit-bom", version.ref = "junit" }
+junit-jupiter = { module = "org.junit.jupiter:junit-jupiter" }
+junit-jupiter-api = { module = "org.junit.jupiter:junit-jupiter-api" }
+junit-jupiter-engine = { module = "org.junit.jupiter:junit-jupiter-engine" }
+
+archunit-junit5 = { module = "com.tngtech.archunit:archunit-junit5", version.ref = "archunit" }
+
+javax-annotation-api = { module = "javax.annotation:javax.annotation-api", version = "1.3.2" }
+
+[plugins]
+spotless = { id = "com.diffplug.spotless", version.ref = "spotless" }
+shadow = { id = "com.github.johnrengelman.shadow", version.ref = "shadow" }
