@@ -120,7 +120,7 @@ class EndToEndSystemTest {
 
     ObjectMapper mapper = new ObjectMapper();
     Map<String, Object> body = mapper.readValue(response.body(), Map.class);
-    assertEquals(3, (int) body.get("rowCount"));
+    assertEquals(3, (int) body.get("spanCount"));
   }
 
   @Test

@@ -38,6 +38,7 @@ public final class Main {
     SpanBuffer spanBuffer = injector.getInstance(SpanBuffer.class);
 
     queryEngine.refreshView();
+    queryEngine.startPeriodicRefresh(config.query().refreshIntervalSeconds());
     grpcServer.start();
     restApi.start();
 

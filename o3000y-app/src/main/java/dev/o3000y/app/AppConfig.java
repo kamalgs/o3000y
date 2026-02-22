@@ -29,11 +29,13 @@ public record AppConfig(
     int batchFlushIntervalSec = Integer.parseInt(env("O3000Y_BATCH_FLUSH_INTERVAL_SEC", "30"));
     int maxResultRows = Integer.parseInt(env("O3000Y_MAX_RESULT_ROWS", "10000"));
     int queryTimeoutSec = Integer.parseInt(env("O3000Y_QUERY_TIMEOUT_SEC", "60"));
+    long refreshIntervalSec = Long.parseLong(env("O3000Y_REFRESH_INTERVAL_SEC", "30"));
 
     return new AppConfig(
         new StorageConfig(dataPath),
         new BatchConfig(batchMaxSpans, batchMaxBytes, Duration.ofSeconds(batchFlushIntervalSec)),
-        new QueryConfig(dataPath, maxResultRows, Duration.ofSeconds(queryTimeoutSec)),
+        new QueryConfig(
+            dataPath, maxResultRows, Duration.ofSeconds(queryTimeoutSec), refreshIntervalSec),
         grpcPort,
         restPort);
   }

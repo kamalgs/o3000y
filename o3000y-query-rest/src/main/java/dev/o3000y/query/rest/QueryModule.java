@@ -18,6 +18,12 @@ public final class QueryModule extends AbstractModule {
 
   @Provides
   @Singleton
+  QueryConfig provideQueryConfig() {
+    return queryConfig;
+  }
+
+  @Provides
+  @Singleton
   DuckDbQueryEngine provideQueryEngine() {
     return new DuckDbQueryEngine(queryConfig);
   }

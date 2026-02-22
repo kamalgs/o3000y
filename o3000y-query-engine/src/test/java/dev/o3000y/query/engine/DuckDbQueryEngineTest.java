@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.*;
 import dev.o3000y.testing.fixtures.ParquetTestHelper;
 import dev.o3000y.testing.fixtures.SpanFixtures;
 import java.nio.file.Path;
+import java.time.Duration;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -53,5 +54,57 @@ class DuckDbQueryEngineTest {
 
     QueryResult traceResult = engine.getTrace(traceId);
     assertEquals(3, traceResult.rowCount());
+  }
+
+  @Test
+  void invalidSql_throwsInvalidQueryException() {
+    assertThrows(InvalidQueryException.class, () -> engine.executeQuery("THIS IS NOT VALID SQL"));
+  }
+
+  @Test
+  void getTrace_invalidTraceId_throwsInvalidQueryException() {
+    assertThrows(InvalidQueryException.class, () -> engine.getTrace(""));
+  }
+
+  @Test
+  void resultSizeLimited() throws Exception {
+    // Write additional spans to get more rows
+    ParquetTestHelper helper = new ParquetTestHelper();
+    helper.writeSpansWithHivePartitioning(tempDir, SpanFixtures.aTrace(5));
+    engine.refreshView();
+
+    // Use a config with maxResultRows=2
+    DuckDbQueryEngine limitedEngine =
+        new DuckDbQueryEngine(new QueryConfig(tempDir, 2, Duration.ofSeconds(60)));
+    limitedEngine.refreshView();
+    try {
+      QueryResult result = limitedEngine.executeQuery("SELECT * FROM spans");
+      assertTrue(result.rowCount() <= 2);
+    } finally {
+      limitedEngine.close();
+    }
+  }
+
+  @Test
+  void refreshView_makesNewDataVisible() throws Exception {
+    // Start engine on empty temp dir — no view yet
+    DuckDbQueryEngine freshEngine =
+        new DuckDbQueryEngine(QueryConfig.defaults(tempDir.resolve("empty")));
+    try {
+      freshEngine.refreshView();
+
+      // Write data after initial view creation
+      ParquetTestHelper helper = new ParquetTestHelper();
+      Path dataDir = tempDir.resolve("empty");
+      java.nio.file.Files.createDirectories(dataDir);
+      helper.writeSpansWithHivePartitioning(dataDir, SpanFixtures.aTrace(5));
+
+      // After refresh, new data is visible
+      freshEngine.refreshView();
+      QueryResult after = freshEngine.executeQuery("SELECT count(*) as cnt FROM spans");
+      assertEquals(5L, ((Number) after.rows().getFirst().getFirst()).longValue());
+    } finally {
+      freshEngine.close();
+    }
   }
 }
