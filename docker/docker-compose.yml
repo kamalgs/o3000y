@@ -1,0 +1,31 @@
+services:
+  o3000y:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    ports:
+      - "4317:4317"
+      - "8080:8080"
+    volumes:
+      - o3000y-data:/data
+    environment:
+      - O3000Y_DATA_PATH=/data
+      - O3000Y_GRPC_PORT=4317
+      - O3000Y_REST_PORT=8080
+      - O3000Y_BATCH_MAX_SPANS=100
+      - O3000Y_BATCH_FLUSH_INTERVAL_SEC=5
+
+  telemetrygen:
+    image: ghcr.io/open-telemetry/opentelemetry-collector-contrib/telemetrygen:latest
+    command:
+      - traces
+      - --otlp-endpoint=o3000y:4317
+      - --otlp-insecure
+      - --traces=10
+      - --workers=2
+      - --rate=1
+    depends_on:
+      - o3000y
+
+volumes:
+  o3000y-data:

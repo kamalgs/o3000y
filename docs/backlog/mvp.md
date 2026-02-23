@@ -1,0 +1,23 @@
+# MVP Backlog (Completed)
+
+- [x] Project skeleton with Gradle multi-module build
+- [x] Domain model (Span, SpanEvent, SpanLink records)
+- [x] OTLP/gRPC ingestion with proto mapping
+- [x] SpanBuffer batching (count, byte-size, timer)
+- [x] Parquet storage with Hive partitioning
+- [x] ZSTD compression, dictionary encoding, sorted writes
+- [x] Multi-partition writes
+- [x] DuckDB query engine with periodic view refresh
+- [x] Query timeout and result-size limits
+- [x] REST API (query, trace, services, operations, search)
+- [x] Error handling (400, 408, 500)
+- [x] Health endpoint
+- [x] Vue 3 UI (SQL editor, trace waterfall, search, histogram)
+- [x] Docker Compose with telemetrygen
+- [x] Input validation and storage resilience
+- [x] Structured logging
+- [x] ArchUnit architecture fitness tests
+- [x] Integration tests (ingestion→storage, storage→query, full pipeline)
+- [x] System tests (multi-trace, filtering, concurrent ingestion)
+- [x] JaCoCo test coverage
+- [x] Spotless code formatting

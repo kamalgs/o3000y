@@ -1,0 +1,15 @@
+rootProject.name = "o3000y"
+
+include("o3000y-model")
+include("o3000y-ingestion-api")
+include("o3000y-ingestion-core")
+include("o3000y-ingestion-grpc")
+include("o3000y-storage-api")
+include("o3000y-storage-parquet")
+include("o3000y-storage-local")
+include("o3000y-query-engine")
+include("o3000y-query-rest")
+include("o3000y-testing-fixtures")
+include("o3000y-testing-integration")
+include("o3000y-testing-system")
+include("o3000y-app")
