@@ -3,8 +3,7 @@ WORKDIR /app
 COPY . .
 RUN gradle :o3000y-app:shadowJar --no-daemon
 
-FROM eclipse-temurin:21-jre-alpine
-RUN apk add --no-cache libstdc++
+FROM eclipse-temurin:21-jre
 WORKDIR /app
 COPY --from=builder /app/o3000y-app/build/libs/o3000y-app-*.jar /app/o3000y.jar
 RUN mkdir -p /data
