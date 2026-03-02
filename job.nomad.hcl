@@ -33,5 +33,32 @@ job "o3000y" {
         memory = 1024
       }
     }
+
+    task "telemetrygen" {
+      driver = "docker"
+
+      config {
+        image        = "ghcr.io/open-telemetry/opentelemetry-collector-contrib/telemetrygen:latest"
+        network_mode = "host"
+        args = [
+          "traces",
+          "--otlp-endpoint=localhost:4317",
+          "--otlp-insecure",
+          "--traces=10",
+          "--workers=2",
+          "--rate=1",
+        ]
+      }
+
+      lifecycle {
+        hook    = "poststart"
+        sidecar = false
+      }
+
+      resources {
+        cpu    = 100
+        memory = 64
+      }
+    }
   }
 }
