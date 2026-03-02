@@ -19,8 +19,8 @@ job "o3000y" {
       driver = "docker"
 
       config {
-        image        = "o3000y:latest"
-        network_mode = "host"
+        image      = "o3000y:local"
+        network_mode   = "host"
       }
 
       volume_mount {
