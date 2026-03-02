@@ -26,6 +26,12 @@ job "o3000y" {
       env {
         O3000Y_REST_PORT = "8081"
         O3000Y_GRPC_PORT = "4327"
+        OTEL_SERVICE_NAME = "o3000y"
+        OTEL_EXPORTER_OTLP_ENDPOINT = "http://localhost:4318"
+        OTEL_EXPORTER_OTLP_PROTOCOL = "http/protobuf"
+        OTEL_LOGS_EXPORTER = "otlp"
+        OTEL_METRICS_EXPORTER = "otlp"
+        OTEL_TRACES_EXPORTER = "otlp"
       }
 
       volume_mount {
