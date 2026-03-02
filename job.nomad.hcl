@@ -19,8 +19,13 @@ job "o3000y" {
       driver = "docker"
 
       config {
-        image      = "o3000y:local"
-        network_mode   = "host"
+        image        = "o3000y:local"
+        network_mode = "host"
+      }
+
+      env {
+        O3000Y_REST_PORT = "8081"
+        O3000Y_GRPC_PORT = "4327"
       }
 
       volume_mount {
@@ -42,7 +47,7 @@ job "o3000y" {
         network_mode = "host"
         args = [
           "traces",
-          "--otlp-endpoint=localhost:4317",
+          "--otlp-endpoint=localhost:4327",
           "--otlp-insecure",
           "--traces=10",
           "--workers=2",
