@@ -9,13 +9,13 @@ COPY o3000y-ingestion-api/build.gradle.kts o3000y-ingestion-api/build.gradle.kts
 COPY o3000y-ingestion-core/build.gradle.kts o3000y-ingestion-core/build.gradle.kts
 COPY o3000y-ingestion-grpc/build.gradle.kts o3000y-ingestion-grpc/build.gradle.kts
 COPY o3000y-storage-api/build.gradle.kts o3000y-storage-api/build.gradle.kts
-COPY o3000y-storage-parquet/build.gradle.kts o3000y-storage-parquet/build.gradle.kts
-COPY o3000y-storage-local/build.gradle.kts o3000y-storage-local/build.gradle.kts
+COPY o3000y-storage-ducklake/build.gradle.kts o3000y-storage-ducklake/build.gradle.kts
 COPY o3000y-query-engine/build.gradle.kts o3000y-query-engine/build.gradle.kts
 COPY o3000y-query-rest/build.gradle.kts o3000y-query-rest/build.gradle.kts
 COPY o3000y-testing-fixtures/build.gradle.kts o3000y-testing-fixtures/build.gradle.kts
 COPY o3000y-testing-integration/build.gradle.kts o3000y-testing-integration/build.gradle.kts
 COPY o3000y-testing-system/build.gradle.kts o3000y-testing-system/build.gradle.kts
+COPY o3000y-loadgen/build.gradle.kts o3000y-loadgen/build.gradle.kts
 COPY o3000y-app/build.gradle.kts o3000y-app/build.gradle.kts
 
 # 2) Download all dependencies (cached unless build files change)
@@ -29,7 +29,8 @@ FROM eclipse-temurin:21-jre
 WORKDIR /app
 COPY --from=builder /app/o3000y-app/build/libs/o3000y-app-*.jar /app/o3000y.jar
 ADD https://github.com/open-telemetry/opentelemetry-java-instrumentation/releases/latest/download/opentelemetry-javaagent.jar /app/opentelemetry-javaagent.jar
-RUN mkdir -p /data
+RUN mkdir -p /data /data/files
 EXPOSE 4317 8080
-ENV O3000Y_DATA_PATH=/data
+ENV O3000Y_DATA_PATH=/data/files/
+ENV O3000Y_CATALOG_URI=/data/metadata.ducklake
 ENTRYPOINT ["java", "-javaagent:/app/opentelemetry-javaagent.jar", "-jar", "/app/o3000y.jar"]
