@@ -28,6 +28,7 @@ dependencies {
     implementation(project(":o3000y-storage-ducklake"))
     implementation(project(":o3000y-query-engine"))
     implementation(project(":o3000y-query-rest"))
+    implementation(project(":o3000y-loadgen"))
     implementation(libs.guice)
     implementation(libs.slf4j.api)
     runtimeOnly(libs.logback.classic)
