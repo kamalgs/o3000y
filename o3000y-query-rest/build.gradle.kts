@@ -7,6 +7,7 @@ description = "REST API for query service"
 dependencies {
     api(project(":o3000y-query-engine"))
     implementation(project(":o3000y-storage-ducklake"))
+    implementation(project(":o3000y-loadgen"))
     implementation(libs.guice)
     implementation(libs.javalin)
     implementation(libs.jackson.databind)

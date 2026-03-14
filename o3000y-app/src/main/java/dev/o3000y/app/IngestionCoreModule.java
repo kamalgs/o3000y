@@ -5,6 +5,7 @@ import com.google.inject.Provides;
 import dev.o3000y.ingestion.api.BatchConfig;
 import dev.o3000y.ingestion.api.SpanReceiver;
 import dev.o3000y.ingestion.core.SpanBuffer;
+import dev.o3000y.loadgen.LoadGenService;
 import dev.o3000y.model.PipelineMetrics;
 import dev.o3000y.storage.api.StorageWriter;
 import jakarta.inject.Singleton;
@@ -33,5 +34,11 @@ public final class IngestionCoreModule extends AbstractModule {
   @Singleton
   SpanReceiver provideSpanReceiver(SpanBuffer buffer) {
     return buffer;
+  }
+
+  @Provides
+  @Singleton
+  LoadGenService provideLoadGenService(SpanReceiver receiver) {
+    return new LoadGenService(receiver::receive);
   }
 }

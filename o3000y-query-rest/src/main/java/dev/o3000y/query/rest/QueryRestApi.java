@@ -2,6 +2,7 @@ package dev.o3000y.query.rest;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import dev.o3000y.loadgen.LoadGenService;
 import dev.o3000y.model.PipelineMetrics;
 import dev.o3000y.query.engine.DuckDbQueryEngine;
 import dev.o3000y.query.engine.InvalidQueryException;
@@ -22,18 +23,24 @@ public final class QueryRestApi {
 
   private final DuckDbQueryEngine queryEngine;
   private final PipelineMetrics metrics;
+  private final LoadGenService loadGenService;
   private final int port;
   private final ObjectMapper objectMapper = new ObjectMapper();
   private Javalin app;
 
-  public QueryRestApi(DuckDbQueryEngine queryEngine, PipelineMetrics metrics, int port) {
+  public QueryRestApi(
+      DuckDbQueryEngine queryEngine,
+      PipelineMetrics metrics,
+      LoadGenService loadGenService,
+      int port) {
     this.queryEngine = queryEngine;
     this.metrics = metrics;
+    this.loadGenService = loadGenService;
     this.port = port;
   }
 
   public QueryRestApi(DuckDbQueryEngine queryEngine, int port) {
-    this(queryEngine, new PipelineMetrics(), port);
+    this(queryEngine, new PipelineMetrics(), null, port);
   }
 
   public void start() {
@@ -55,6 +62,12 @@ public final class QueryRestApi {
     app.get("/api/v1/operations", this::handleGetOperations);
     app.get("/api/v1/search", this::handleSearch);
     app.get("/api/v1/metrics", this::handleMetrics);
+
+    if (loadGenService != null) {
+      app.post("/api/v1/loadgen/start", this::handleLoadGenStart);
+      app.post("/api/v1/loadgen/stop", this::handleLoadGenStop);
+      app.get("/api/v1/loadgen/status", this::handleLoadGenStatus);
+    }
 
     LOG.info("REST API started on port {}", port);
   }
@@ -268,6 +281,29 @@ public final class QueryRestApi {
 
   private void handleMetrics(Context ctx) {
     ctx.contentType("text/plain; version=0.0.4; charset=utf-8").result(metrics.toPrometheus());
+  }
+
+  @SuppressWarnings("unchecked")
+  private void handleLoadGenStart(Context ctx) {
+    try {
+      Map<String, Object> body = objectMapper.readValue(ctx.body(), Map.class);
+      int duration = ((Number) body.getOrDefault("durationSeconds", 60)).intValue();
+      double tps = ((Number) body.getOrDefault("tracesPerSecond", 10.0)).doubleValue();
+      double errRate = ((Number) body.getOrDefault("errorRate", 0.05)).doubleValue();
+      int depth = ((Number) body.getOrDefault("maxDepth", 5)).intValue();
+      int breadth = ((Number) body.getOrDefault("maxBreadth", 3)).intValue();
+      ctx.json(loadGenService.start(duration, tps, errRate, depth, breadth));
+    } catch (Exception e) {
+      ctx.status(400).json(new ErrorResponse("Invalid request: " + e.getMessage(), 400));
+    }
+  }
+
+  private void handleLoadGenStop(Context ctx) {
+    ctx.json(loadGenService.stop());
+  }
+
+  private void handleLoadGenStatus(Context ctx) {
+    ctx.json(loadGenService.status());
   }
 
   public void stop() {

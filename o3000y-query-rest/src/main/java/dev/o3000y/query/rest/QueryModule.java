@@ -2,6 +2,7 @@ package dev.o3000y.query.rest;
 
 import com.google.inject.AbstractModule;
 import com.google.inject.Provides;
+import dev.o3000y.loadgen.LoadGenService;
 import dev.o3000y.model.PipelineMetrics;
 import dev.o3000y.query.engine.DuckDbQueryEngine;
 import dev.o3000y.query.engine.QueryConfig;
@@ -32,7 +33,8 @@ public final class QueryModule extends AbstractModule {
 
   @Provides
   @Singleton
-  QueryRestApi provideRestApi(DuckDbQueryEngine engine, PipelineMetrics metrics) {
-    return new QueryRestApi(engine, metrics, restPort);
+  QueryRestApi provideRestApi(
+      DuckDbQueryEngine engine, PipelineMetrics metrics, LoadGenService loadGenService) {
+    return new QueryRestApi(engine, metrics, loadGenService, restPort);
   }
 }

@@ -2,6 +2,10 @@ job "o3000y" {
   datacenters = ["dc1"]
   type        = "service"
 
+  meta {
+    deployed_at = "2026-03-14T13:30:00Z"
+  }
+
   group "app" {
     count = 1
 
