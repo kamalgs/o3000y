@@ -3,7 +3,7 @@ job "o3000y" {
   type        = "service"
 
   group "app" {
-    count = 0
+    count = 1
 
     network {
       mode = "host"
@@ -24,14 +24,16 @@ job "o3000y" {
       }
 
       env {
-        O3000Y_REST_PORT = "8081"
-        O3000Y_GRPC_PORT = "4327"
-        OTEL_SERVICE_NAME = "o3000y"
+        O3000Y_REST_PORT            = "8083"
+        O3000Y_GRPC_PORT            = "4327"
+        O3000Y_DATA_PATH            = "/data/files/"
+        O3000Y_CATALOG_URI          = "/data/metadata.ducklake"
+        OTEL_SERVICE_NAME           = "o3000y"
         OTEL_EXPORTER_OTLP_ENDPOINT = "http://localhost:4318"
         OTEL_EXPORTER_OTLP_PROTOCOL = "http/protobuf"
-        OTEL_LOGS_EXPORTER = "otlp"
-        OTEL_METRICS_EXPORTER = "otlp"
-        OTEL_TRACES_EXPORTER = "otlp"
+        OTEL_LOGS_EXPORTER          = "otlp"
+        OTEL_METRICS_EXPORTER       = "otlp"
+        OTEL_TRACES_EXPORTER        = "otlp"
       }
 
       volume_mount {
