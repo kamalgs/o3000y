@@ -12,8 +12,7 @@ dependencies {
     testImplementation(project(":o3000y-ingestion-core"))
     testImplementation(project(":o3000y-ingestion-grpc"))
     testImplementation(project(":o3000y-storage-api"))
-    testImplementation(project(":o3000y-storage-parquet"))
-    testImplementation(project(":o3000y-storage-local"))
+    testImplementation(project(":o3000y-storage-ducklake"))
     testImplementation(project(":o3000y-query-engine"))
     testImplementation(project(":o3000y-query-rest"))
     testImplementation(libs.guice)
@@ -24,6 +23,5 @@ dependencies {
     testImplementation(libs.protobuf.java)
     testImplementation(libs.jackson.databind)
     testImplementation(libs.duckdb.jdbc)
-    testImplementation(libs.hadoop.common)
     testImplementation(libs.logback.classic)
 }

@@ -2,8 +2,10 @@ package dev.o3000y.query.rest;
 
 import com.google.inject.AbstractModule;
 import com.google.inject.Provides;
+import dev.o3000y.model.PipelineMetrics;
 import dev.o3000y.query.engine.DuckDbQueryEngine;
 import dev.o3000y.query.engine.QueryConfig;
+import dev.o3000y.storage.ducklake.DuckLakeManager;
 import jakarta.inject.Singleton;
 
 public final class QueryModule extends AbstractModule {
@@ -24,13 +26,13 @@ public final class QueryModule extends AbstractModule {
 
   @Provides
   @Singleton
-  DuckDbQueryEngine provideQueryEngine() {
-    return new DuckDbQueryEngine(queryConfig);
+  DuckDbQueryEngine provideQueryEngine(DuckLakeManager manager, PipelineMetrics metrics) {
+    return new DuckDbQueryEngine(queryConfig, manager.newConnection(), metrics);
   }
 
   @Provides
   @Singleton
-  QueryRestApi provideRestApi(DuckDbQueryEngine engine) {
-    return new QueryRestApi(engine, restPort);
+  QueryRestApi provideRestApi(DuckDbQueryEngine engine, PipelineMetrics metrics) {
+    return new QueryRestApi(engine, metrics, restPort);
   }
 }

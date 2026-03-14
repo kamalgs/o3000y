@@ -2,6 +2,7 @@ package dev.o3000y.query.rest;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import dev.o3000y.model.PipelineMetrics;
 import dev.o3000y.query.engine.DuckDbQueryEngine;
 import dev.o3000y.query.engine.InvalidQueryException;
 import dev.o3000y.query.engine.QueryResult;
@@ -20,13 +21,19 @@ public final class QueryRestApi {
   private static final Logger LOG = LoggerFactory.getLogger(QueryRestApi.class);
 
   private final DuckDbQueryEngine queryEngine;
+  private final PipelineMetrics metrics;
   private final int port;
   private final ObjectMapper objectMapper = new ObjectMapper();
   private Javalin app;
 
-  public QueryRestApi(DuckDbQueryEngine queryEngine, int port) {
+  public QueryRestApi(DuckDbQueryEngine queryEngine, PipelineMetrics metrics, int port) {
     this.queryEngine = queryEngine;
+    this.metrics = metrics;
     this.port = port;
+  }
+
+  public QueryRestApi(DuckDbQueryEngine queryEngine, int port) {
+    this(queryEngine, new PipelineMetrics(), port);
   }
 
   public void start() {
@@ -47,6 +54,7 @@ public final class QueryRestApi {
     app.get("/api/v1/services", this::handleGetServices);
     app.get("/api/v1/operations", this::handleGetOperations);
     app.get("/api/v1/search", this::handleSearch);
+    app.get("/api/v1/metrics", this::handleMetrics);
 
     LOG.info("REST API started on port {}", port);
   }
@@ -256,6 +264,10 @@ public final class QueryRestApi {
       LOG.error("Search failed", e);
       ctx.status(500).json(new ErrorResponse("Internal server error: " + e.getMessage(), 500));
     }
+  }
+
+  private void handleMetrics(Context ctx) {
+    ctx.contentType("text/plain; version=0.0.4; charset=utf-8").result(metrics.toPrometheus());
   }
 
   public void stop() {

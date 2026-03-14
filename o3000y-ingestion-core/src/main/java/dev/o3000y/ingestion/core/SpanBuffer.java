@@ -2,6 +2,7 @@ package dev.o3000y.ingestion.core;
 
 import dev.o3000y.ingestion.api.BatchConfig;
 import dev.o3000y.ingestion.api.SpanReceiver;
+import dev.o3000y.model.PipelineMetrics;
 import dev.o3000y.model.Span;
 import dev.o3000y.storage.api.StorageWriter;
 import java.util.ArrayList;
@@ -21,16 +22,16 @@ public final class SpanBuffer implements SpanReceiver {
 
   private final StorageWriter storageWriter;
   private final BatchConfig config;
+  private final PipelineMetrics metrics;
   private final ReentrantLock lock = new ReentrantLock();
   private List<Span> buffer = new ArrayList<>();
   private final AtomicLong currentBufferBytes = new AtomicLong(0);
-  private final AtomicLong totalSpansReceived = new AtomicLong(0);
-  private final AtomicLong totalFlushes = new AtomicLong(0);
   private final ScheduledExecutorService scheduler;
 
-  public SpanBuffer(StorageWriter storageWriter, BatchConfig config) {
+  public SpanBuffer(StorageWriter storageWriter, BatchConfig config, PipelineMetrics metrics) {
     this.storageWriter = storageWriter;
     this.config = config;
+    this.metrics = metrics;
     this.scheduler =
         Executors.newSingleThreadScheduledExecutor(
             r -> {
@@ -45,10 +46,14 @@ public final class SpanBuffer implements SpanReceiver {
         TimeUnit.MILLISECONDS);
   }
 
+  public SpanBuffer(StorageWriter storageWriter, BatchConfig config) {
+    this(storageWriter, config, new PipelineMetrics());
+  }
+
   @Override
   public void receive(List<Span> spans) {
     long batchBytes = (long) spans.size() * estimateSpanSize(spans);
-    totalSpansReceived.addAndGet(spans.size());
+    metrics.recordReceive(spans.size());
     LOG.debug("Received {} spans ({} bytes est.)", spans.size(), batchBytes);
 
     lock.lock();
@@ -77,13 +82,15 @@ public final class SpanBuffer implements SpanReceiver {
     List<Span> toFlush = buffer;
     buffer = new ArrayList<>();
     long bytes = currentBufferBytes.getAndSet(0);
-    totalFlushes.incrementAndGet();
     LOG.info("Flushing {} spans (~{} bytes)", toFlush.size(), bytes);
+    long start = System.nanoTime();
     try {
       storageWriter.write(toFlush);
     } catch (Exception e) {
       LOG.error("Flush failed for {} spans", toFlush.size(), e);
     }
+    long durationNanos = System.nanoTime() - start;
+    metrics.recordFlush(toFlush.size(), durationNanos);
   }
 
   private void timerFlush() {
@@ -104,11 +111,11 @@ public final class SpanBuffer implements SpanReceiver {
   }
 
   public long getTotalSpansReceived() {
-    return totalSpansReceived.get();
+    return metrics.getSpansReceived();
   }
 
   public long getTotalFlushes() {
-    return totalFlushes.get();
+    return metrics.getFlushCount();
   }
 
   public void shutdown() {
