@@ -11,6 +11,15 @@ public final class PipelineMetrics {
   private final LongAdder spansReceived = new LongAdder();
   private final AtomicLong receiveCalls = new AtomicLong();
 
+  // Ingestion delay histogram (seconds): now() - span.startTime()
+  private static final double[] DELAY_BUCKET_BOUNDS = {
+    0.01, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0, 30.0, 60.0
+  };
+
+  private final LongAdder[] delayBuckets;
+  private final LongAdder delayCount = new LongAdder();
+  private final DoubleAdder delaySum = new DoubleAdder();
+
   // Buffer flush
   private final AtomicLong flushCount = new AtomicLong();
   private final LongAdder flushSpanCount = new LongAdder();
@@ -28,9 +37,28 @@ public final class PipelineMetrics {
   private final AtomicLong queryDurationNanosTotal = new AtomicLong();
   private final AtomicLong queryErrors = new AtomicLong();
 
+  public PipelineMetrics() {
+    delayBuckets = new LongAdder[DELAY_BUCKET_BOUNDS.length + 1]; // last is +Inf
+    for (int i = 0; i < delayBuckets.length; i++) {
+      delayBuckets[i] = new LongAdder();
+    }
+  }
+
   public void recordReceive(int spanCount) {
     spansReceived.add(spanCount);
     receiveCalls.incrementAndGet();
+  }
+
+  public void recordIngestionDelay(double delaySeconds) {
+    delayCount.increment();
+    delaySum.add(delaySeconds);
+    for (int i = 0; i < DELAY_BUCKET_BOUNDS.length; i++) {
+      if (delaySeconds <= DELAY_BUCKET_BOUNDS[i]) {
+        delayBuckets[i].increment();
+        return;
+      }
+    }
+    delayBuckets[DELAY_BUCKET_BOUNDS.length].increment(); // +Inf
   }
 
   public void recordFlush(int spanCount, long durationNanos) {
@@ -93,6 +121,9 @@ public final class PipelineMetrics {
     counter(sb, "o3000y_ingestion_spans_received_total", "Total spans received", spans);
     counter(sb, "o3000y_ingestion_receive_calls_total", "Total receive() calls", receives);
 
+    // Ingestion delay histogram
+    appendDelayHistogram(sb);
+
     // Buffer
     counter(sb, "o3000y_buffer_flushes_total", "Total buffer flushes", flushes);
     counter(sb, "o3000y_buffer_spans_flushed_total", "Total spans flushed", flushedSpans);
@@ -130,6 +161,27 @@ public final class PipelineMetrics {
     return sb.toString();
   }
 
+  private void appendDelayHistogram(StringBuilder sb) {
+    String name = "o3000y_ingestion_delay_seconds";
+    sb.append("# HELP ").append(name).append(" Delay between span event time and ingestion time\n");
+    sb.append("# TYPE ").append(name).append(" histogram\n");
+
+    long cumulative = 0;
+    for (int i = 0; i < DELAY_BUCKET_BOUNDS.length; i++) {
+      cumulative += delayBuckets[i].sum();
+      sb.append(name)
+          .append("_bucket{le=\"")
+          .append(DELAY_BUCKET_BOUNDS[i])
+          .append("\"} ")
+          .append(cumulative)
+          .append('\n');
+    }
+    cumulative += delayBuckets[DELAY_BUCKET_BOUNDS.length].sum();
+    sb.append(name).append("_bucket{le=\"+Inf\"} ").append(cumulative).append('\n');
+    sb.append(name).append("_sum ").append(delaySum.sum()).append('\n');
+    sb.append(name).append("_count ").append(delayCount.sum()).append('\n');
+  }
+
   private static void counter(StringBuilder sb, String name, String help, long value) {
     sb.append("# HELP ").append(name).append(' ').append(help).append('\n');
     sb.append("# TYPE ").append(name).append(" counter\n");
@@ -158,5 +210,23 @@ public final class PipelineMetrics {
 
   private static double nanosToSec(long nanos) {
     return nanos / 1_000_000_000.0;
+  }
+
+  /** Thread-safe double accumulator using AtomicLong CAS. */
+  private static final class DoubleAdder {
+
+    private final AtomicLong bits = new AtomicLong(Double.doubleToLongBits(0.0));
+
+    void add(double value) {
+      long prev, next;
+      do {
+        prev = bits.get();
+        next = Double.doubleToLongBits(Double.longBitsToDouble(prev) + value);
+      } while (!bits.compareAndSet(prev, next));
+    }
+
+    double sum() {
+      return Double.longBitsToDouble(bits.get());
+    }
   }
 }

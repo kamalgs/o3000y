@@ -177,6 +177,10 @@ class QueryRestApiTest {
     assertTrue(body.contains("# HELP o3000y_uptime_seconds"));
     assertTrue(body.contains("# TYPE o3000y_uptime_seconds gauge"));
     assertTrue(body.contains("o3000y_ingestion_spans_received_total"));
+    assertTrue(body.contains("o3000y_ingestion_delay_seconds"));
+    assertTrue(body.contains("o3000y_ingestion_delay_seconds_bucket{le="));
+    assertTrue(body.contains("o3000y_ingestion_delay_seconds_sum"));
+    assertTrue(body.contains("o3000y_ingestion_delay_seconds_count"));
     assertTrue(body.contains("o3000y_storage_writes_total"));
     assertTrue(body.contains("o3000y_query_total"));
   }
