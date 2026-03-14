@@ -5,7 +5,7 @@ import static org.junit.jupiter.api.Assertions.*;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import dev.o3000y.query.engine.DuckDbQueryEngine;
 import dev.o3000y.query.engine.QueryConfig;
-import dev.o3000y.testing.fixtures.ParquetTestHelper;
+import dev.o3000y.testing.fixtures.DuckLakeTestHelper;
 import dev.o3000y.testing.fixtures.SpanFixtures;
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -23,6 +23,7 @@ class QueryRestApiTest {
 
   @TempDir Path tempDir;
 
+  private DuckLakeTestHelper helper;
   private DuckDbQueryEngine engine;
   private QueryRestApi restApi;
   private int port;
@@ -31,7 +32,8 @@ class QueryRestApiTest {
 
   @BeforeEach
   void setUp() {
-    engine = new DuckDbQueryEngine(QueryConfig.defaults(tempDir));
+    helper = new DuckLakeTestHelper(tempDir);
+    engine = new DuckDbQueryEngine(QueryConfig.defaults(), helper.manager().newConnection());
     port = 18080 + (int) (Math.random() * 1000);
     restApi = new QueryRestApi(engine, port);
     restApi.start();
@@ -41,6 +43,7 @@ class QueryRestApiTest {
   void tearDown() {
     restApi.stop();
     engine.close();
+    helper.close();
   }
 
   @Test
@@ -105,12 +108,9 @@ class QueryRestApiTest {
   @Test
   @SuppressWarnings("unchecked")
   void getTrace_returnsStructuredResponse() throws Exception {
-    // Write test spans
     var spans = SpanFixtures.aTrace(3);
     String traceId = spans.getFirst().traceId();
-    ParquetTestHelper helper = new ParquetTestHelper();
-    helper.writeSpansWithHivePartitioning(tempDir, spans);
-    engine.refreshView();
+    helper.writer().write(spans);
 
     HttpRequest request =
         HttpRequest.newBuilder()
@@ -127,7 +127,6 @@ class QueryRestApiTest {
     List<Map<String, Object>> spanList = (List<Map<String, Object>>) body.get("spans");
     assertEquals(3, spanList.size());
 
-    // Verify spans have expected fields
     Map<String, Object> firstSpan = spanList.getFirst();
     assertNotNull(firstSpan.get("spanId"));
     assertNotNull(firstSpan.get("operationName"));
@@ -135,16 +134,54 @@ class QueryRestApiTest {
   }
 
   @Test
-  void getTrace_invalidId_returns400() throws Exception {
+  void getTrace_purelyInvalidId_returns400() throws Exception {
+    // Use chars that are ALL non-hex to ensure sanitized ID is empty
     HttpRequest request =
         HttpRequest.newBuilder()
-            .uri(URI.create("http://localhost:" + port + "/api/v1/trace/!!!invalid!!!"))
+            .uri(URI.create("http://localhost:" + port + "/api/v1/trace/!!!---!!!"))
             .GET()
             .build();
 
     HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
-    // DuckDB should still return an empty result for a valid-but-nonexistent hex trace
-    // But for completely invalid characters, getTrace sanitizes to empty → 400
     assertEquals(400, response.statusCode());
+  }
+
+  @Test
+  @SuppressWarnings("unchecked")
+  void getTrace_nonexistentId_returnsEmptyTrace() throws Exception {
+    HttpRequest request =
+        HttpRequest.newBuilder()
+            .uri(URI.create("http://localhost:" + port + "/api/v1/trace/deadbeef00000000"))
+            .GET()
+            .build();
+
+    HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+    assertEquals(200, response.statusCode());
+
+    Map<String, Object> body = objectMapper.readValue(response.body(), Map.class);
+    assertEquals(0, (int) body.get("spanCount"));
+  }
+
+  @Test
+  void metrics_returnsPrometheusFormat() throws Exception {
+    HttpRequest request =
+        HttpRequest.newBuilder()
+            .uri(URI.create("http://localhost:" + port + "/api/v1/metrics"))
+            .GET()
+            .build();
+
+    HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+    assertEquals(200, response.statusCode());
+    assertTrue(response.headers().firstValue("Content-Type").orElse("").contains("text/plain"));
+    String body = response.body();
+    assertTrue(body.contains("# HELP o3000y_uptime_seconds"));
+    assertTrue(body.contains("# TYPE o3000y_uptime_seconds gauge"));
+    assertTrue(body.contains("o3000y_ingestion_spans_received_total"));
+    assertTrue(body.contains("o3000y_ingestion_delay_seconds"));
+    assertTrue(body.contains("o3000y_ingestion_delay_seconds_bucket{le="));
+    assertTrue(body.contains("o3000y_ingestion_delay_seconds_sum"));
+    assertTrue(body.contains("o3000y_ingestion_delay_seconds_count"));
+    assertTrue(body.contains("o3000y_storage_writes_total"));
+    assertTrue(body.contains("o3000y_query_total"));
   }
 }

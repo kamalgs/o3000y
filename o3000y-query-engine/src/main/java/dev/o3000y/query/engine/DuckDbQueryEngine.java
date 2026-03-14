@@ -1,11 +1,9 @@
 package dev.o3000y.query.engine;
 
+import dev.o3000y.model.PipelineMetrics;
 import java.sql.*;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.TimeUnit;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -14,58 +12,22 @@ public final class DuckDbQueryEngine {
   private static final Logger LOG = LoggerFactory.getLogger(DuckDbQueryEngine.class);
 
   private final QueryConfig config;
-  private Connection connection;
-  private ScheduledExecutorService refreshScheduler;
+  private final Connection connection;
+  private final PipelineMetrics metrics;
 
-  public DuckDbQueryEngine(QueryConfig config) {
+  public DuckDbQueryEngine(QueryConfig config, Connection connection, PipelineMetrics metrics) {
     this.config = config;
-    try {
-      this.connection = DriverManager.getConnection("jdbc:duckdb:");
-    } catch (SQLException e) {
-      throw new RuntimeException("Failed to create DuckDB connection", e);
-    }
+    this.connection = connection;
+    this.metrics = metrics;
   }
 
-  public synchronized void refreshView() {
-    try (Statement stmt = connection.createStatement()) {
-      String globPattern = config.dataPath().toAbsolutePath() + "/**/*.parquet";
-      stmt.execute(
-          "CREATE OR REPLACE VIEW spans AS SELECT * FROM read_parquet('"
-              + globPattern
-              + "', hive_partitioning=true, union_by_name=true)");
-      LOG.info("Refreshed spans view from {}", globPattern);
-    } catch (SQLException e) {
-      LOG.warn("Failed to refresh view (data dir may be empty): {}", e.getMessage());
-    }
-  }
-
-  public void startPeriodicRefresh(long intervalSeconds) {
-    if (refreshScheduler != null) {
-      return;
-    }
-    refreshScheduler =
-        Executors.newSingleThreadScheduledExecutor(
-            r -> {
-              Thread t = new Thread(r, "duckdb-view-refresh");
-              t.setDaemon(true);
-              return t;
-            });
-    refreshScheduler.scheduleAtFixedRate(
-        () -> {
-          try {
-            refreshView();
-          } catch (Exception e) {
-            LOG.error("Periodic view refresh failed", e);
-          }
-        },
-        intervalSeconds,
-        intervalSeconds,
-        TimeUnit.SECONDS);
-    LOG.info("Started periodic view refresh every {}s", intervalSeconds);
+  public DuckDbQueryEngine(QueryConfig config, Connection connection) {
+    this(config, connection, new PipelineMetrics());
   }
 
   public synchronized QueryResult executeQuery(String sql) {
-    long start = System.currentTimeMillis();
+    long startNanos = System.nanoTime();
+    long startMs = System.currentTimeMillis();
     long timeoutMs = config.queryTimeout().toMillis();
 
     try (Statement stmt = connection.createStatement()) {
@@ -91,10 +53,12 @@ public final class DuckDbQueryEngine {
       }
       rs.close();
 
-      long elapsed = System.currentTimeMillis() - start;
+      long elapsed = System.currentTimeMillis() - startMs;
+      metrics.recordQuery(System.nanoTime() - startNanos);
       return new QueryResult(columns, rows, rows.size(), elapsed);
     } catch (SQLException e) {
-      long elapsed = System.currentTimeMillis() - start;
+      metrics.recordQueryError();
+      long elapsed = System.currentTimeMillis() - startMs;
       if (elapsed >= timeoutMs || isTimeoutError(e)) {
         throw new QueryTimeoutException(sql, timeoutMs);
       }
@@ -118,9 +82,6 @@ public final class DuckDbQueryEngine {
   }
 
   public void close() {
-    if (refreshScheduler != null) {
-      refreshScheduler.shutdown();
-    }
     try {
       if (connection != null && !connection.isClosed()) {
         connection.close();

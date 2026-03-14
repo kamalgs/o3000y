@@ -5,6 +5,7 @@ import com.google.inject.Provides;
 import dev.o3000y.ingestion.api.BatchConfig;
 import dev.o3000y.ingestion.api.SpanReceiver;
 import dev.o3000y.ingestion.core.SpanBuffer;
+import dev.o3000y.model.PipelineMetrics;
 import dev.o3000y.storage.api.StorageWriter;
 import jakarta.inject.Singleton;
 
@@ -19,12 +20,13 @@ public final class IngestionCoreModule extends AbstractModule {
   @Override
   protected void configure() {
     bind(BatchConfig.class).toInstance(config);
+    bind(PipelineMetrics.class).in(Singleton.class);
   }
 
   @Provides
   @Singleton
-  SpanBuffer provideSpanBuffer(StorageWriter storageWriter) {
-    return new SpanBuffer(storageWriter, config);
+  SpanBuffer provideSpanBuffer(StorageWriter storageWriter, PipelineMetrics metrics) {
+    return new SpanBuffer(storageWriter, config, metrics);
   }
 
   @Provides

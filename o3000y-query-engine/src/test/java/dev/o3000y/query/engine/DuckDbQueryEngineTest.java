@@ -2,7 +2,7 @@ package dev.o3000y.query.engine;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-import dev.o3000y.testing.fixtures.ParquetTestHelper;
+import dev.o3000y.testing.fixtures.DuckLakeTestHelper;
 import dev.o3000y.testing.fixtures.SpanFixtures;
 import java.nio.file.Path;
 import java.time.Duration;
@@ -14,20 +14,20 @@ import org.junit.jupiter.api.io.TempDir;
 class DuckDbQueryEngineTest {
 
   @TempDir Path tempDir;
+  private DuckLakeTestHelper helper;
   private DuckDbQueryEngine engine;
 
   @BeforeEach
-  void setUp() throws Exception {
-    ParquetTestHelper helper = new ParquetTestHelper();
-    helper.writeSpansWithHivePartitioning(tempDir, SpanFixtures.aTrace(3));
-
-    engine = new DuckDbQueryEngine(QueryConfig.defaults(tempDir));
-    engine.refreshView();
+  void setUp() {
+    helper = new DuckLakeTestHelper(tempDir);
+    helper.writer().write(SpanFixtures.aTrace(3));
+    engine = new DuckDbQueryEngine(QueryConfig.defaults(), helper.manager().newConnection());
   }
 
   @AfterEach
   void tearDown() {
     engine.close();
+    helper.close();
   }
 
   @Test
@@ -67,16 +67,12 @@ class DuckDbQueryEngineTest {
   }
 
   @Test
-  void resultSizeLimited() throws Exception {
-    // Write additional spans to get more rows
-    ParquetTestHelper helper = new ParquetTestHelper();
-    helper.writeSpansWithHivePartitioning(tempDir, SpanFixtures.aTrace(5));
-    engine.refreshView();
+  void resultSizeLimited() {
+    helper.writer().write(SpanFixtures.aTrace(5));
 
-    // Use a config with maxResultRows=2
     DuckDbQueryEngine limitedEngine =
-        new DuckDbQueryEngine(new QueryConfig(tempDir, 2, Duration.ofSeconds(60)));
-    limitedEngine.refreshView();
+        new DuckDbQueryEngine(
+            new QueryConfig(2, Duration.ofSeconds(60)), helper.manager().newConnection());
     try {
       QueryResult result = limitedEngine.executeQuery("SELECT * FROM spans");
       assertTrue(result.rowCount() <= 2);
@@ -86,25 +82,12 @@ class DuckDbQueryEngineTest {
   }
 
   @Test
-  void refreshView_makesNewDataVisible() throws Exception {
-    // Start engine on empty temp dir — no view yet
-    DuckDbQueryEngine freshEngine =
-        new DuckDbQueryEngine(QueryConfig.defaults(tempDir.resolve("empty")));
-    try {
-      freshEngine.refreshView();
+  void newDataImmediatelyVisible() {
+    // Write additional data
+    helper.writer().write(SpanFixtures.aTrace(5));
 
-      // Write data after initial view creation
-      ParquetTestHelper helper = new ParquetTestHelper();
-      Path dataDir = tempDir.resolve("empty");
-      java.nio.file.Files.createDirectories(dataDir);
-      helper.writeSpansWithHivePartitioning(dataDir, SpanFixtures.aTrace(5));
-
-      // After refresh, new data is visible
-      freshEngine.refreshView();
-      QueryResult after = freshEngine.executeQuery("SELECT count(*) as cnt FROM spans");
-      assertEquals(5L, ((Number) after.rows().getFirst().getFirst()).longValue());
-    } finally {
-      freshEngine.close();
-    }
+    // No refresh needed — data is visible immediately
+    QueryResult result = engine.executeQuery("SELECT count(*) as cnt FROM spans");
+    assertEquals(8L, ((Number) result.rows().getFirst().getFirst()).longValue());
   }
 }
