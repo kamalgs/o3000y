@@ -1,188 +1,171 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
+import { formatNumber, formatTimestamp } from '@/lib/formatting'
 
-interface DataPoint {
-  bucket: string
-  value: number
+export interface Series {
+  name: string
+  data: { bucket: string; value: number }[]
+  color: string
 }
 
-const props = defineProps<{
-  data: DataPoint[]
-  label: string
-}>()
+const props = defineProps<{ series: Series[]; label: string }>()
 
 const hoveredIndex = ref<number | null>(null)
 
-const WIDTH = 800
-const HEIGHT = 260
-const PADDING = { top: 20, right: 20, bottom: 50, left: 70 }
-const chartW = WIDTH - PADDING.left - PADDING.right
-const chartH = HEIGHT - PADDING.top - PADDING.bottom
+const W = 800
+const H = 260
+const P = { t: 20, r: 20, b: 50, l: 60 }
+const cw = W - P.l - P.r
+const ch = H - P.t - P.b
+
+const allBuckets = computed(() => {
+  const set = new Set<string>()
+  for (const s of props.series) for (const d of s.data) set.add(d.bucket)
+  return [...set].sort()
+})
 
 const yRange = computed(() => {
-  if (props.data.length === 0) return { min: 0, max: 1 }
-  const vals = props.data.map((d) => d.value)
-  const min = Math.min(...vals)
-  const max = Math.max(...vals)
+  let min = Infinity
+  let max = -Infinity
+  for (const s of props.series) for (const d of s.data) {
+    if (d.value < min) min = d.value
+    if (d.value > max) max = d.value
+  }
+  if (!isFinite(min)) return { min: 0, max: 1 }
   const pad = (max - min) * 0.1 || 1
   return { min: Math.max(0, min - pad), max: max + pad }
 })
 
-const points = computed(() => {
+function x(i: number): number {
+  const n = allBuckets.value.length
+  return P.l + (n <= 1 ? cw / 2 : (i / (n - 1)) * cw)
+}
+
+function y(v: number): number {
   const { min, max } = yRange.value
-  const n = props.data.length
-  if (n === 0) return []
-  return props.data.map((d, i) => ({
-    x: PADDING.left + (n === 1 ? chartW / 2 : (i / (n - 1)) * chartW),
-    y: PADDING.top + chartH - ((d.value - min) / (max - min)) * chartH,
-    ...d,
-  }))
-})
+  return P.t + ch - ((v - min) / (max - min)) * ch
+}
 
-const linePath = computed(() => {
-  if (points.value.length === 0) return ''
-  return points.value.map((p, i) => `${i === 0 ? 'M' : 'L'}${p.x},${p.y}`).join(' ')
-})
-
-const areaPath = computed(() => {
-  if (points.value.length === 0) return ''
-  const bottom = PADDING.top + chartH
-  const first = points.value[0]
-  const last = points.value[points.value.length - 1]
-  return `${linePath.value} L${last.x},${bottom} L${first.x},${bottom} Z`
-})
+function linePath(s: Series): string {
+  const bucketMap = new Map(s.data.map((d) => [d.bucket, d.value]))
+  return allBuckets.value
+    .map((b, i) => {
+      const v = bucketMap.get(b)
+      if (v == null) return null
+      return `${i === 0 || !bucketMap.has(allBuckets.value[i - 1]) ? 'M' : 'L'}${x(i)},${y(v)}`
+    })
+    .filter(Boolean)
+    .join(' ')
+}
 
 const yTicks = computed(() => {
   const { min, max } = yRange.value
-  const ticks: number[] = []
-  const step = (max - min) / 4
-  for (let i = 0; i <= 4; i++) {
-    ticks.push(min + step * i)
-  }
-  return ticks
+  return Array.from({ length: 5 }, (_, i) => min + ((max - min) * i) / 4)
 })
 
-function formatValue(v: number): string {
-  if (v >= 1_000_000) return (v / 1_000_000).toFixed(1) + 'M'
-  if (v >= 1_000) return (v / 1_000).toFixed(1) + 'K'
-  return Number.isInteger(v) ? v.toString() : v.toFixed(2)
-}
+const isSingle = computed(() => props.series.length === 1)
 
-function formatBucket(b: string): string {
-  try {
-    const d = new Date(b)
-    return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-  } catch {
-    return b
-  }
-}
-
-function onMouseMove(event: MouseEvent) {
-  const svg = (event.currentTarget as SVGSVGElement)
+function onMouseMove(e: MouseEvent) {
+  const svg = e.currentTarget as SVGSVGElement
   const rect = svg.getBoundingClientRect()
-  const mouseX = ((event.clientX - rect.left) / rect.width) * WIDTH
-  const relX = mouseX - PADDING.left
-  if (relX < 0 || relX > chartW || props.data.length === 0) {
+  const mx = ((e.clientX - rect.left) / rect.width) * W - P.l
+  if (mx < 0 || mx > cw || allBuckets.value.length === 0) {
     hoveredIndex.value = null
     return
   }
-  const n = props.data.length
-  const idx = Math.round((relX / chartW) * (n - 1))
-  hoveredIndex.value = Math.max(0, Math.min(n - 1, idx))
+  hoveredIndex.value = Math.round((mx / cw) * (allBuckets.value.length - 1))
 }
 
-function onMouseLeave() {
-  hoveredIndex.value = null
+function tooltipValues(): { name: string; value: string; color: string }[] {
+  if (hoveredIndex.value == null) return []
+  const bucket = allBuckets.value[hoveredIndex.value]
+  return props.series.map((s) => {
+    const d = s.data.find((d) => d.bucket === bucket)
+    return { name: s.name, value: d != null ? formatNumber(d.value) : '-', color: s.color }
+  })
 }
 </script>
 
 <template>
-  <div class="bg-white rounded-lg border border-gray-200 p-4">
-    <div class="text-sm font-medium text-gray-600 mb-2">{{ label }}</div>
+  <div class="card">
+    <div class="flex items-center justify-between mb-2">
+      <span class="form-label mb-0">{{ label }}</span>
+      <div v-if="!isSingle" class="flex flex-wrap gap-3">
+        <span v-for="s in series" :key="s.name" class="text-xs flex items-center gap-1">
+          <span class="legend-swatch" :style="{ background: s.color }" />
+          {{ s.name }}
+        </span>
+      </div>
+    </div>
 
-    <div v-if="data.length === 0" class="text-center text-gray-400 py-12 text-sm">
+    <div v-if="allBuckets.length === 0" class="text-center py-12 text-sm" style="color: var(--color-text-muted)">
       No data for selected time range
     </div>
 
     <svg
       v-else
-      :viewBox="`0 0 ${WIDTH} ${HEIGHT}`"
+      :viewBox="`0 0 ${W} ${H}`"
       class="w-full"
       style="max-height: 280px"
       @mousemove="onMouseMove"
-      @mouseleave="onMouseLeave"
+      @mouseleave="hoveredIndex = null"
     >
-      <!-- Y-axis grid + labels -->
-      <template v-for="tick in yTicks" :key="tick">
-        <line
-          :x1="PADDING.left"
-          :y1="PADDING.top + chartH - ((tick - yRange.min) / (yRange.max - yRange.min)) * chartH"
-          :x2="PADDING.left + chartW"
-          :y2="PADDING.top + chartH - ((tick - yRange.min) / (yRange.max - yRange.min)) * chartH"
-          stroke="#e5e7eb"
-          stroke-width="1"
-        />
+      <!-- grid -->
+      <line
+        v-for="t in yTicks" :key="t"
+        :x1="P.l" :x2="P.l + cw"
+        :y1="y(t)" :y2="y(t)"
+        stroke="var(--color-border-light)" stroke-width="1"
+      />
+      <text
+        v-for="t in yTicks" :key="'yl' + t"
+        :x="P.l - 6" :y="y(t) + 3"
+        text-anchor="end" fill="var(--color-text-muted)" font-size="10"
+      >{{ formatNumber(t) }}</text>
+
+      <!-- x labels -->
+      <template v-for="(b, i) in allBuckets" :key="'xl' + i">
         <text
-          :x="PADDING.left - 8"
-          :y="PADDING.top + chartH - ((tick - yRange.min) / (yRange.max - yRange.min)) * chartH + 4"
-          text-anchor="end"
-          class="fill-gray-400"
-          font-size="11"
-        >{{ formatValue(tick) }}</text>
+          v-if="allBuckets.length <= 8 || i % Math.ceil(allBuckets.length / 8) === 0"
+          :x="x(i)" :y="P.t + ch + 20"
+          text-anchor="middle" fill="var(--color-text-muted)" font-size="10"
+        >{{ formatTimestamp(b) }}</text>
       </template>
 
-      <!-- X-axis labels (show ~6 evenly spaced) -->
-      <template v-for="(p, i) in points" :key="'x' + i">
-        <text
-          v-if="data.length <= 6 || i % Math.ceil(data.length / 6) === 0"
-          :x="p.x"
-          :y="PADDING.top + chartH + 20"
-          text-anchor="middle"
-          class="fill-gray-400"
-          font-size="10"
-        >{{ formatBucket(p.bucket) }}</text>
-      </template>
-
-      <!-- Area fill -->
-      <path :d="areaPath" fill="rgba(99, 102, 241, 0.1)" />
-
-      <!-- Line -->
-      <path :d="linePath" fill="none" stroke="#6366f1" stroke-width="2" stroke-linejoin="round" />
-
-      <!-- Data points -->
-      <circle
-        v-for="(p, i) in points"
-        :key="'dot' + i"
-        :cx="p.x"
-        :cy="p.y"
-        :r="hoveredIndex === i ? 5 : 2.5"
-        fill="#6366f1"
-        :stroke="hoveredIndex === i ? '#4f46e5' : 'none'"
-        :stroke-width="hoveredIndex === i ? 2 : 0"
+      <!-- area (single series only) -->
+      <path
+        v-if="isSingle && series[0]?.data.length > 1"
+        :d="linePath(series[0]) + ` L${x(allBuckets.length - 1)},${P.t + ch} L${x(0)},${P.t + ch} Z`"
+        :fill="series[0].color" opacity="0.08"
       />
 
-      <!-- Hover crosshair -->
-      <template v-if="hoveredIndex !== null && points[hoveredIndex]">
-        <line
-          :x1="points[hoveredIndex].x"
-          :y1="PADDING.top"
-          :x2="points[hoveredIndex].x"
-          :y2="PADDING.top + chartH"
-          stroke="#6366f1"
-          stroke-width="1"
-          stroke-dasharray="4 2"
-          opacity="0.5"
-        />
-      </template>
+      <!-- lines -->
+      <path
+        v-for="s in series" :key="s.name"
+        :d="linePath(s)" fill="none" :stroke="s.color"
+        stroke-width="2" stroke-linejoin="round"
+      />
+
+      <!-- hover crosshair -->
+      <line
+        v-if="hoveredIndex != null"
+        :x1="x(hoveredIndex)" :x2="x(hoveredIndex)"
+        :y1="P.t" :y2="P.t + ch"
+        stroke="var(--color-text-muted)" stroke-width="1" stroke-dasharray="3 2"
+      />
     </svg>
 
-    <!-- Tooltip below chart -->
+    <!-- tooltip -->
     <div
-      v-if="hoveredIndex !== null && points[hoveredIndex]"
-      class="text-center text-sm text-gray-600 mt-1"
+      v-if="hoveredIndex != null"
+      class="text-center text-xs mt-1"
+      style="color: var(--color-text-secondary)"
     >
-      <span class="font-medium text-indigo-600">{{ formatValue(points[hoveredIndex].value) }}</span>
-      at {{ formatBucket(data[hoveredIndex].bucket) }}
+      <span class="mr-2">{{ formatTimestamp(allBuckets[hoveredIndex]) }}</span>
+      <span v-for="tv in tooltipValues()" :key="tv.name" class="mr-3">
+        <span class="legend-swatch" :style="{ background: tv.color }" />
+        <strong>{{ tv.value }}</strong>
+      </span>
     </div>
   </div>
 </template>

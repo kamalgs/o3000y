@@ -1,71 +1,44 @@
 <script setup lang="ts">
-import { ref, onMounted, watch } from 'vue'
-import { useRouter } from 'vue-router'
-import { getServices, getOperations } from '../api/client'
+import { ref, onMounted } from 'vue'
+import { getServices } from '@/api/client'
 
-const router = useRouter()
+defineProps<{ activeService?: string }>()
+defineEmits<{ selectService: [name: string] }>()
+
 const services = ref<string[]>([])
-const operations = ref<string[]>([])
-const selectedService = ref<string | null>(null)
-const error = ref('')
 
 onMounted(async () => {
   try {
     services.value = await getServices()
   } catch {
-    error.value = 'Failed to load services'
+    services.value = []
   }
 })
-
-watch(selectedService, async (svc) => {
-  operations.value = []
-  if (svc) {
-    try {
-      operations.value = await getOperations(svc)
-    } catch {
-      // ignore
-    }
-  }
-})
-
-function selectOperation(op: string) {
-  router.push({
-    path: '/search',
-    query: { service: selectedService.value || undefined, operation: op },
-  })
-}
 </script>
 
 <template>
-  <aside class="bg-white border-r border-gray-200 overflow-y-auto">
-    <div class="p-4">
-      <h2 class="text-sm font-semibold text-gray-600 uppercase tracking-wide mb-3">Services</h2>
-      <div v-if="error" class="text-xs text-red-500 mb-2">{{ error }}</div>
-      <ul class="space-y-1">
-        <li v-if="services.length === 0" class="text-xs text-gray-400">No services found</li>
-        <li
-          v-for="svc in services"
-          :key="svc"
-          @click="selectedService = selectedService === svc ? null : svc"
-          class="px-2 py-1.5 rounded text-sm cursor-pointer hover:bg-gray-100 truncate"
-          :class="{ 'bg-blue-50 text-blue-700': selectedService === svc }"
-        >
-          {{ svc }}
-        </li>
-      </ul>
+  <aside
+    class="h-full overflow-y-auto"
+    style="background: var(--color-surface); border-right: 1px solid var(--color-border-light)"
+  >
+    <div class="px-3 py-3">
+      <span class="form-label">Services</span>
     </div>
-    <div v-if="selectedService && operations.length > 0" class="p-4 border-t border-gray-200">
-      <h2 class="text-sm font-semibold text-gray-600 uppercase tracking-wide mb-3">Operations</h2>
-      <ul class="space-y-1">
-        <li
-          v-for="op in operations"
-          :key="op"
-          @click="selectOperation(op)"
-          class="px-2 py-1.5 rounded text-sm cursor-pointer hover:bg-gray-100 truncate"
-        >
-          {{ op }}
-        </li>
-      </ul>
+
+    <div v-if="services.length === 0" class="px-3 pb-3 text-xs" style="color: var(--color-text-muted)">
+      No services found
     </div>
+
+    <nav class="px-2 pb-3 space-y-0.5">
+      <button
+        v-for="svc in services"
+        :key="svc"
+        class="sidebar-item w-full text-left"
+        :class="{ 'sidebar-item--active': svc === activeService }"
+        @click="$emit('selectService', svc)"
+      >
+        {{ svc }}
+      </button>
+    </nav>
   </aside>
 </template>

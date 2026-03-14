@@ -10,6 +10,7 @@ export interface ExploreQuery {
   filters: Filter[]
   timeRange: string
   interval: string
+  groupBy: string
 }
 
 export type AggregationType =
@@ -27,7 +28,7 @@ export type AggregationType =
 export const AGGREGATIONS: { value: AggregationType; label: string; needsMeasure: boolean }[] = [
   { value: 'count', label: 'COUNT', needsMeasure: false },
   { value: 'count_distinct_traces', label: 'COUNT(distinct traces)', needsMeasure: false },
-  { value: 'rate', label: 'RATE (per second)', needsMeasure: false },
+  { value: 'rate', label: 'RATE (/s)', needsMeasure: false },
   { value: 'avg', label: 'AVG', needsMeasure: true },
   { value: 'sum', label: 'SUM', needsMeasure: true },
   { value: 'p50', label: 'P50', needsMeasure: true },
@@ -52,6 +53,13 @@ export const FILTER_COLUMNS = [
   'attributes',
 ]
 
+export const GROUP_BY_COLUMNS = [
+  'service_name',
+  'operation_name',
+  'status_code',
+  'span_kind',
+]
+
 export const OPERATORS: { value: Filter['operator']; label: string }[] = [
   { value: '=', label: '=' },
   { value: '!=', label: '!=' },
@@ -64,8 +72,8 @@ export const OPERATORS: { value: Filter['operator']; label: string }[] = [
 ]
 
 export const TIME_RANGES: { value: string; label: string }[] = [
-  { value: '5m', label: 'Last 5 minutes' },
-  { value: '15m', label: 'Last 15 minutes' },
+  { value: '5m', label: 'Last 5 min' },
+  { value: '15m', label: 'Last 15 min' },
   { value: '1h', label: 'Last 1 hour' },
   { value: '6h', label: 'Last 6 hours' },
   { value: '24h', label: 'Last 24 hours' },
@@ -74,14 +82,27 @@ export const TIME_RANGES: { value: string; label: string }[] = [
 ]
 
 export const INTERVALS: { value: string; label: string }[] = [
-  { value: '10s', label: '10 seconds' },
-  { value: '30s', label: '30 seconds' },
-  { value: '1m', label: '1 minute' },
-  { value: '5m', label: '5 minutes' },
-  { value: '15m', label: '15 minutes' },
+  { value: '10s', label: '10s' },
+  { value: '30s', label: '30s' },
+  { value: '1m', label: '1 min' },
+  { value: '5m', label: '5 min' },
+  { value: '15m', label: '15 min' },
   { value: '1h', label: '1 hour' },
   { value: '1d', label: '1 day' },
 ]
+
+export const CHART_COLORS = [
+  'var(--color-chart-1)',
+  'var(--color-chart-2)',
+  'var(--color-chart-3)',
+  'var(--color-chart-4)',
+  'var(--color-chart-5)',
+  'var(--color-chart-6)',
+  'var(--color-chart-7)',
+  'var(--color-chart-8)',
+]
+
+// ── internals ──
 
 function escapeSQL(value: string): string {
   return value.replace(/'/g, "''")
@@ -130,6 +151,22 @@ function toRangeSQL(range: string): string {
   return `'${n} ${u}${Number(n) > 1 ? 's' : ''}'`
 }
 
+function intervalToSeconds(interval: string): number {
+  const match = interval.match(/^(\d+)([smhd])$/)
+  if (!match) return 60
+  const [, n, unit] = match
+  const m: Record<string, number> = { s: 1, m: 60, h: 3600, d: 86400 }
+  return Number(n) * (m[unit] || 60)
+}
+
+function rangeToSeconds(range: string): number {
+  const match = range.match(/^(\d+)([mhd])$/)
+  if (!match) return 3600
+  const [, n, unit] = match
+  const m: Record<string, number> = { m: 60, h: 3600, d: 86400 }
+  return Number(n) * (m[unit] || 3600)
+}
+
 function buildWhere(filters: Filter[], timeRange: string): string {
   const clauses: string[] = []
   clauses.push(`start_time >= NOW() - INTERVAL ${toRangeSQL(timeRange)}`)
@@ -145,21 +182,29 @@ function buildWhere(filters: Filter[], timeRange: string): string {
   return clauses.join('\n  AND ')
 }
 
+function rateExpr(divisor: number): string {
+  return `ROUND(COUNT(*)::DOUBLE / ${divisor}, 2) AS value`
+}
+
+// ── public API ──
+
 export function buildTimeSeriesSQL(query: ExploreQuery): string {
-  const agg = aggExpression(query.aggregation, query.measure)
   const intervalSQL = toIntervalSQL(query.interval)
   const where = buildWhere(query.filters, query.timeRange)
+  const isRate = query.aggregation === 'rate'
+  const valueExpr = isRate
+    ? rateExpr(intervalToSeconds(query.interval))
+    : `${aggExpression(query.aggregation, query.measure)} AS value`
 
-  let valueExpr = `${agg} AS value`
-  if (query.aggregation === 'rate') {
-    const intervalMatch = query.interval.match(/^(\d+)([smhd])$/)
-    let intervalSeconds = 60
-    if (intervalMatch) {
-      const [, n, unit] = intervalMatch
-      const multipliers: Record<string, number> = { s: 1, m: 60, h: 3600, d: 86400 }
-      intervalSeconds = Number(n) * (multipliers[unit] || 60)
-    }
-    valueExpr = `ROUND(COUNT(*)::DOUBLE / ${intervalSeconds}, 2) AS value`
+  if (query.groupBy) {
+    return `SELECT
+  time_bucket(INTERVAL ${intervalSQL}, start_time) AS bucket,
+  ${query.groupBy} AS group_key,
+  ${valueExpr}
+FROM spans
+WHERE ${where}
+GROUP BY bucket, group_key
+ORDER BY bucket, group_key`
   }
 
   return `SELECT
@@ -172,24 +217,31 @@ ORDER BY bucket`
 }
 
 export function buildSummarySQL(query: ExploreQuery): string {
-  const agg = aggExpression(query.aggregation, query.measure)
   const where = buildWhere(query.filters, query.timeRange)
+  const isRate = query.aggregation === 'rate'
 
-  if (query.aggregation === 'rate') {
-    const rangeMatch = query.timeRange.match(/^(\d+)([mhd])$/)
-    let rangeSeconds = 3600
-    if (rangeMatch) {
-      const [, n, unit] = rangeMatch
-      const multipliers: Record<string, number> = { m: 60, h: 3600, d: 86400 }
-      rangeSeconds = Number(n) * (multipliers[unit] || 3600)
-    }
-    return `SELECT ROUND(COUNT(*)::DOUBLE / ${rangeSeconds}, 2) AS value\nFROM spans\nWHERE ${where}`
+  if (query.groupBy) {
+    const valueExpr = isRate
+      ? rateExpr(rangeToSeconds(query.timeRange))
+      : `${aggExpression(query.aggregation, query.measure)} AS value`
+    return `SELECT
+  ${query.groupBy} AS group_key,
+  ${valueExpr}
+FROM spans
+WHERE ${where}
+GROUP BY group_key
+ORDER BY value DESC
+LIMIT 20`
   }
 
-  return `SELECT ${agg} AS value\nFROM spans\nWHERE ${where}`
+  if (isRate) {
+    return `SELECT ${rateExpr(rangeToSeconds(query.timeRange))}\nFROM spans\nWHERE ${where}`
+  }
+  return `SELECT ${aggExpression(query.aggregation, query.measure)} AS value\nFROM spans\nWHERE ${where}`
 }
 
-// URL serialization
+// ── URL serialization ──
+
 export function serializeQuery(query: ExploreQuery): Record<string, string> {
   const params: Record<string, string> = {
     agg: query.aggregation,
@@ -197,10 +249,9 @@ export function serializeQuery(query: ExploreQuery): Record<string, string> {
     interval: query.interval,
   }
   if (query.measure) params.measure = query.measure
+  if (query.groupBy) params.groupBy = query.groupBy
   if (query.filters.length > 0) {
-    params.filters = JSON.stringify(
-      query.filters.filter((f) => f.column && f.value),
-    )
+    params.filters = JSON.stringify(query.filters.filter((f) => f.column && f.value))
   }
   return params
 }
@@ -220,6 +271,7 @@ export function deserializeQuery(params: Record<string, string>): ExploreQuery {
     filters,
     timeRange: params.range || '1h',
     interval: params.interval || '5m',
+    groupBy: params.groupBy || '',
   }
 }
 
@@ -230,5 +282,12 @@ export function defaultQuery(): ExploreQuery {
     filters: [],
     timeRange: '1h',
     interval: '5m',
+    groupBy: '',
   }
+}
+
+export function aggLabel(query: ExploreQuery): string {
+  const agg = AGGREGATIONS.find((a) => a.value === query.aggregation)
+  if (!agg) return query.aggregation
+  return agg.needsMeasure ? `${agg.label}(${query.measure})` : agg.label
 }

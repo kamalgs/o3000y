@@ -1,97 +1,106 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import type { QueryResponse } from '../api/client'
+import { type QueryResponse } from '@/api/client'
+import { formatNumber, isNumericColumn } from '@/lib/formatting'
 
 const props = defineProps<{ result: QueryResponse }>()
 const router = useRouter()
 
-const sortColumn = ref<number | null>(null)
+const sortCol = ref(-1)
 const sortAsc = ref(true)
 const page = ref(0)
-const pageSize = 50
+const PAGE_SIZE = 50
+
+const numericCols = computed(() => {
+  const set = new Set<number>()
+  for (let i = 0; i < props.result.columns.length; i++) {
+    if (isNumericColumn(props.result.rows, i)) set.add(i)
+  }
+  return set
+})
+
+const statusCodeIdx = computed(() => props.result.columns.indexOf('status_code'))
+const traceIdIdx = computed(() => props.result.columns.indexOf('trace_id'))
 
 const sortedRows = computed(() => {
-  const rows = [...props.result.rows]
-  if (sortColumn.value !== null) {
-    const col = sortColumn.value
-    const asc = sortAsc.value
-    rows.sort((a, b) => {
-      const va = a[col]
-      const vb = b[col]
-      if (va == null && vb == null) return 0
-      if (va == null) return asc ? -1 : 1
-      if (vb == null) return asc ? 1 : -1
-      if (typeof va === 'number' && typeof vb === 'number') return asc ? va - vb : vb - va
-      return asc ? String(va).localeCompare(String(vb)) : String(vb).localeCompare(String(va))
-    })
-  }
-  return rows
+  if (sortCol.value < 0) return props.result.rows
+  const col = sortCol.value
+  const dir = sortAsc.value ? 1 : -1
+  return [...props.result.rows].sort((a, b) => {
+    const va = a[col]
+    const vb = b[col]
+    if (va == null && vb == null) return 0
+    if (va == null) return dir
+    if (vb == null) return -dir
+    if (typeof va === 'number' && typeof vb === 'number') return (va - vb) * dir
+    return String(va).localeCompare(String(vb)) * dir
+  })
 })
 
-const pagedRows = computed(() => {
-  const start = page.value * pageSize
-  return sortedRows.value.slice(start, start + pageSize)
-})
+const pagedRows = computed(() =>
+  sortedRows.value.slice(page.value * PAGE_SIZE, (page.value + 1) * PAGE_SIZE),
+)
 
-const totalPages = computed(() => Math.ceil(sortedRows.value.length / pageSize))
+const totalPages = computed(() => Math.ceil(sortedRows.value.length / PAGE_SIZE))
 
 function toggleSort(col: number) {
-  if (sortColumn.value === col) {
+  if (sortCol.value === col) {
     sortAsc.value = !sortAsc.value
   } else {
-    sortColumn.value = col
+    sortCol.value = col
     sortAsc.value = true
   }
+  page.value = 0
 }
 
-function isTraceIdColumn(colName: string): boolean {
-  return colName === 'trace_id'
+function isErrorRow(row: unknown[]): boolean {
+  if (statusCodeIdx.value < 0) return false
+  const v = row[statusCodeIdx.value]
+  return v === 2 || v === '2'
 }
 
-function navigateToTrace(value: unknown) {
-  if (value) {
-    router.push(`/trace/${value}`)
-  }
+function cellDisplay(value: unknown, colIdx: number): string {
+  if (value == null) return ''
+  if (numericCols.value.has(colIdx)) return formatNumber(value)
+  return String(value)
+}
+
+function statusChip(value: unknown): string | null {
+  if (value === 2 || value === '2') return 'ERROR'
+  if (value === 1 || value === '1') return 'OK'
+  return null
 }
 </script>
 
 <template>
-  <div class="bg-white rounded-lg border border-gray-200">
-    <div class="px-4 py-3 border-b border-gray-200 flex items-center justify-between">
-      <span class="text-sm text-gray-600">
-        {{ result.rowCount }} rows in {{ result.elapsedMs }}ms
+  <div class="card p-0 overflow-hidden">
+    <div class="flex items-center justify-between px-3 py-2" style="border-bottom: 1px solid var(--color-border-light)">
+      <span class="text-xs" style="color: var(--color-text-secondary)">
+        {{ result.rowCount }} rows &middot; {{ result.elapsedMs }} ms
       </span>
-      <div v-if="totalPages > 1" class="flex items-center gap-2 text-sm">
-        <button
-          @click="page = Math.max(0, page - 1)"
-          :disabled="page === 0"
-          class="px-2 py-1 rounded border disabled:opacity-30"
-        >
-          Prev
-        </button>
-        <span>{{ page + 1 }} / {{ totalPages }}</span>
-        <button
-          @click="page = Math.min(totalPages - 1, page + 1)"
-          :disabled="page >= totalPages - 1"
-          class="px-2 py-1 rounded border disabled:opacity-30"
-        >
-          Next
-        </button>
+      <div v-if="totalPages > 1" class="flex items-center gap-2">
+        <button class="btn btn-ghost text-xs" :disabled="page === 0" @click="page--">&larr;</button>
+        <span class="text-xs" style="color: var(--color-text-secondary)">
+          {{ page + 1 }} / {{ totalPages }}
+        </span>
+        <button class="btn btn-ghost text-xs" :disabled="page >= totalPages - 1" @click="page++">&rarr;</button>
       </div>
     </div>
+
     <div class="overflow-x-auto">
-      <table class="w-full text-sm">
+      <table class="w-full">
         <thead>
-          <tr class="bg-gray-50 border-b border-gray-200">
+          <tr>
             <th
               v-for="(col, i) in result.columns"
               :key="col"
+              class="th"
+              :class="{ 'th--numeric': numericCols.has(i) }"
               @click="toggleSort(i)"
-              class="px-4 py-2 text-left font-medium text-gray-600 cursor-pointer hover:bg-gray-100 whitespace-nowrap select-none"
             >
               {{ col }}
-              <span v-if="sortColumn === i" class="ml-1">{{ sortAsc ? '\u25B2' : '\u25BC' }}</span>
+              <span v-if="sortCol === i" class="ml-1">{{ sortAsc ? '▲' : '▼' }}</span>
             </th>
           </tr>
         </thead>
@@ -99,21 +108,27 @@ function navigateToTrace(value: unknown) {
           <tr
             v-for="(row, ri) in pagedRows"
             :key="ri"
-            class="border-b border-gray-100 hover:bg-gray-50"
+            :class="{ 'row--error': isErrorRow(row) }"
           >
             <td
               v-for="(val, ci) in row"
               :key="ci"
-              class="px-4 py-2 whitespace-nowrap font-mono text-xs"
+              class="td"
+              :class="{
+                'td--numeric': numericCols.has(ci),
+                'td--mono': ci === traceIdIdx,
+                'td--link': ci === traceIdIdx,
+              }"
+              @click="ci === traceIdIdx && val ? router.push('/trace/' + val) : undefined"
             >
-              <a
-                v-if="isTraceIdColumn(result.columns[ci]) && val"
-                @click.prevent="navigateToTrace(val)"
-                class="text-blue-600 hover:underline cursor-pointer"
-              >
-                {{ val }}
-              </a>
-              <span v-else>{{ val ?? '' }}</span>
+              <template v-if="ci === statusCodeIdx && statusChip(val)">
+                <span class="chip" :class="statusChip(val) === 'ERROR' ? 'chip--error' : 'chip--ok'">
+                  {{ statusChip(val) }}
+                </span>
+              </template>
+              <template v-else>
+                {{ cellDisplay(val, ci) }}
+              </template>
             </td>
           </tr>
         </tbody>

@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
-import SqlEditor from '../components/SqlEditor.vue'
-import ResultsTable from '../components/ResultsTable.vue'
-import { executeQuery, type QueryResponse } from '../api/client'
+import SqlEditor from '@/components/SqlEditor.vue'
+import ResultsTable from '@/components/ResultsTable.vue'
+import ErrorBanner from '@/components/ErrorBanner.vue'
+import { executeQuery, type QueryResponse } from '@/api/client'
 
 const router = useRouter()
 const route = useRoute()
@@ -11,7 +12,7 @@ const route = useRoute()
 const result = ref<QueryResponse | null>(null)
 const error = ref('')
 const loading = ref(false)
-const initialSQL = ref('SELECT * FROM spans LIMIT 100')
+const initialSQL = ref('SELECT * FROM spans ORDER BY start_time DESC LIMIT 100')
 
 onMounted(() => {
   const sqlParam = route.query.sql as string
@@ -39,9 +40,7 @@ async function onExecute(sql: string) {
 <template>
   <div class="space-y-4">
     <SqlEditor @execute="onExecute" :loading="loading" :initial-sql="initialSQL" />
-    <div v-if="error" class="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded">
-      {{ error }}
-    </div>
+    <ErrorBanner :message="error" />
     <ResultsTable v-if="result" :result="result" />
   </div>
 </template>
