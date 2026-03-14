@@ -1,10 +1,20 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, watch } from 'vue'
 
-defineProps<{ loading: boolean }>()
+const props = withDefaults(
+  defineProps<{ loading: boolean; initialSql?: string }>(),
+  { initialSql: 'SELECT * FROM spans LIMIT 100' },
+)
 const emit = defineEmits<{ execute: [sql: string] }>()
 
-const sql = ref('SELECT * FROM spans LIMIT 100')
+const sql = ref(props.initialSql)
+
+watch(
+  () => props.initialSql,
+  (v) => {
+    sql.value = v
+  },
+)
 
 function execute() {
   if (sql.value.trim()) {
@@ -25,7 +35,7 @@ function onKeydown(e: KeyboardEvent) {
     <textarea
       v-model="sql"
       @keydown="onKeydown"
-      class="w-full h-32 font-mono text-sm border border-gray-300 rounded p-3 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-y"
+      class="w-full h-32 font-mono text-sm border border-gray-300 rounded p-3 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 resize-y"
       placeholder="SELECT * FROM spans LIMIT 100"
       spellcheck="false"
     />
@@ -34,7 +44,7 @@ function onKeydown(e: KeyboardEvent) {
       <button
         @click="execute"
         :disabled="loading"
-        class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 text-sm"
+        class="px-4 py-2 bg-indigo-600 text-white rounded hover:bg-indigo-700 disabled:opacity-50 text-sm"
       >
         {{ loading ? 'Running...' : 'Execute' }}
       </button>

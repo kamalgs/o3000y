@@ -10,22 +10,29 @@ import ServiceSidebar from './components/ServiceSidebar.vue'
         <h1 class="text-xl font-bold text-gray-800">o3000y</h1>
         <nav class="flex gap-2">
           <router-link
+            to="/explore"
+            class="px-3 py-1 rounded text-sm hover:bg-gray-100"
+            active-class="bg-indigo-100 text-indigo-700"
+          >
+            Explore
+          </router-link>
+          <router-link
             to="/query"
             class="px-3 py-1 rounded text-sm hover:bg-gray-100"
-            active-class="bg-blue-100 text-blue-700"
+            active-class="bg-indigo-100 text-indigo-700"
           >
-            SQL Query
+            SQL
           </router-link>
           <router-link
             to="/search"
             class="px-3 py-1 rounded text-sm hover:bg-gray-100"
-            active-class="bg-blue-100 text-blue-700"
+            active-class="bg-indigo-100 text-indigo-700"
           >
             Search
           </router-link>
         </nav>
       </header>
-      <main class="flex-1 overflow-auto p-6">
+      <main class="flex-1 overflow-auto p-6 bg-gray-50">
         <router-view />
       </main>
     </div>
