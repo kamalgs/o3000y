@@ -6,10 +6,7 @@ import dev.o3000y.model.Span;
 import dev.o3000y.query.engine.DuckDbQueryEngine;
 import dev.o3000y.query.engine.QueryConfig;
 import dev.o3000y.query.engine.QueryResult;
-import dev.o3000y.storage.api.HivePartitionStrategy;
-import dev.o3000y.storage.api.StorageConfig;
-import dev.o3000y.storage.local.LocalStorageWriter;
-import dev.o3000y.storage.parquet.ParquetSpanWriter;
+import dev.o3000y.testing.fixtures.DuckLakeTestHelper;
 import dev.o3000y.testing.fixtures.SpanFixtures;
 import java.nio.file.Path;
 import java.util.List;
@@ -22,51 +19,46 @@ class StorageQueryIntegrationTest {
 
   @TempDir Path tempDir;
   private DuckDbQueryEngine engine;
-  private LocalStorageWriter storageWriter;
+  private DuckLakeTestHelper helper;
 
   @BeforeEach
   void setUp() {
-    storageWriter =
-        new LocalStorageWriter(
-            new StorageConfig(tempDir), new HivePartitionStrategy(), new ParquetSpanWriter());
-    engine = new DuckDbQueryEngine(QueryConfig.defaults(tempDir));
+    helper = new DuckLakeTestHelper(tempDir);
+    engine = new DuckDbQueryEngine(QueryConfig.defaults(), helper.manager().newConnection());
   }
 
   @AfterEach
   void tearDown() {
     engine.close();
+    helper.close();
   }
 
   @Test
   void writeAndQuery_knownData() {
     List<Span> trace = SpanFixtures.aTrace(3);
     String traceId = trace.getFirst().traceId();
-    storageWriter.write(trace);
-    engine.refreshView();
+    helper.writer().write(trace);
 
     QueryResult result = engine.getTrace(traceId);
     assertEquals(3, result.rowCount());
   }
 
   @Test
-  void hivePartitionPruning_filterByHour() {
-    // Create spans across 3 different hours
-    Span hourOne =
+  void filterByServiceName() {
+    Span span1 =
         SpanFixtures.aSpan(
             SpanFixtures.randomTraceId(), SpanFixtures.randomSpanId(), "", "op1", "svc-prune");
-    Span hourTwo =
+    Span span2 =
         SpanFixtures.aSpan(
             SpanFixtures.randomTraceId(), SpanFixtures.randomSpanId(), "", "op2", "svc-prune");
-    Span hourThree =
+    Span span3 =
         SpanFixtures.aSpan(
             SpanFixtures.randomTraceId(), SpanFixtures.randomSpanId(), "", "op3", "svc-prune");
 
-    storageWriter.write(List.of(hourOne));
-    storageWriter.write(List.of(hourTwo));
-    storageWriter.write(List.of(hourThree));
-    engine.refreshView();
+    helper.writer().write(List.of(span1));
+    helper.writer().write(List.of(span2));
+    helper.writer().write(List.of(span3));
 
-    // Query filtering by service_name
     QueryResult result =
         engine.executeQuery("SELECT count(*) as cnt FROM spans WHERE service_name = 'svc-prune'");
     assertEquals(1, result.rows().size());
@@ -79,8 +71,7 @@ class StorageQueryIntegrationTest {
     Span span =
         SpanFixtures.aSpan(
             "aabbccdd11223344", SpanFixtures.randomSpanId(), "", "test-op", "test-svc");
-    storageWriter.write(List.of(span));
-    engine.refreshView();
+    helper.writer().write(List.of(span));
 
     QueryResult result =
         engine.executeQuery(

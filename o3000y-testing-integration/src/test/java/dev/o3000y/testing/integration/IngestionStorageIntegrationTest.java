@@ -5,13 +5,12 @@ import static org.junit.jupiter.api.Assertions.*;
 import dev.o3000y.ingestion.api.BatchConfig;
 import dev.o3000y.ingestion.core.SpanBuffer;
 import dev.o3000y.model.Span;
-import dev.o3000y.storage.api.HivePartitionStrategy;
-import dev.o3000y.storage.api.StorageConfig;
-import dev.o3000y.storage.local.LocalStorageWriter;
-import dev.o3000y.storage.parquet.ParquetSpanWriter;
+import dev.o3000y.testing.fixtures.DuckLakeTestHelper;
 import dev.o3000y.testing.fixtures.SpanFixtures;
-import java.nio.file.Files;
 import java.nio.file.Path;
+import java.sql.Connection;
+import java.sql.ResultSet;
+import java.sql.Statement;
 import java.time.Duration;
 import java.util.List;
 import org.junit.jupiter.api.Test;
@@ -22,34 +21,24 @@ class IngestionStorageIntegrationTest {
   @TempDir Path tempDir;
 
   @Test
-  void ingestionBuffer_flushesSpans_toParquetFiles() throws Exception {
-    // Setup storage
-    LocalStorageWriter storageWriter =
-        new LocalStorageWriter(
-            new StorageConfig(tempDir), new HivePartitionStrategy(), new ParquetSpanWriter());
+  void ingestionBuffer_flushesSpans_toDuckLake() throws Exception {
+    DuckLakeTestHelper helper = new DuckLakeTestHelper(tempDir);
 
-    // Setup buffer with low threshold to flush immediately
     BatchConfig batchConfig = new BatchConfig(5, Long.MAX_VALUE, Duration.ofHours(1));
-    SpanBuffer buffer = new SpanBuffer(storageWriter, batchConfig);
+    SpanBuffer buffer = new SpanBuffer(helper.writer(), batchConfig);
 
-    // Send spans through ingestion
     List<Span> trace = SpanFixtures.aTrace(5);
     buffer.receive(trace);
-
-    // Buffer should have auto-flushed at threshold
     buffer.shutdown();
 
-    // Verify Parquet files were written in Hive partition paths
-    try (var stream = Files.walk(tempDir)) {
-      long parquetCount = stream.filter(p -> p.toString().endsWith(".parquet")).count();
-      assertTrue(parquetCount >= 1, "Expected at least one Parquet file, found " + parquetCount);
+    // Verify spans were written to DuckLake
+    try (Connection conn = helper.manager().newConnection();
+        Statement stmt = conn.createStatement();
+        ResultSet rs = stmt.executeQuery("SELECT count(*) FROM spans")) {
+      assertTrue(rs.next());
+      assertTrue(rs.getLong(1) >= 5, "Expected at least 5 spans in DuckLake");
     }
 
-    // Verify partition directory structure
-    try (var stream = Files.walk(tempDir)) {
-      boolean hasHivePartitions =
-          stream.anyMatch(p -> p.toString().contains("year=") && p.toString().contains("month="));
-      assertTrue(hasHivePartitions, "Expected Hive partition directories");
-    }
+    helper.close();
   }
 }

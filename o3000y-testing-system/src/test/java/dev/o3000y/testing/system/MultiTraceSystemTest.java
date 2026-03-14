@@ -6,18 +6,16 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.inject.Guice;
 import com.google.inject.Injector;
 import dev.o3000y.app.IngestionCoreModule;
-import dev.o3000y.app.StorageParquetModule;
 import dev.o3000y.ingestion.api.BatchConfig;
 import dev.o3000y.ingestion.core.SpanBuffer;
 import dev.o3000y.ingestion.grpc.GrpcServer;
 import dev.o3000y.ingestion.grpc.IngestionGrpcModule;
 import dev.o3000y.model.Span;
-import dev.o3000y.query.engine.DuckDbQueryEngine;
 import dev.o3000y.query.engine.QueryConfig;
 import dev.o3000y.query.rest.QueryModule;
 import dev.o3000y.query.rest.QueryRestApi;
-import dev.o3000y.storage.api.StorageConfig;
-import dev.o3000y.storage.local.LocalStorageModule;
+import dev.o3000y.storage.ducklake.DuckLakeConfig;
+import dev.o3000y.storage.ducklake.DuckLakeModule;
 import dev.o3000y.testing.fixtures.ProtoFixtures;
 import dev.o3000y.testing.fixtures.SpanFixtures;
 import io.grpc.ManagedChannel;
@@ -43,7 +41,6 @@ class MultiTraceSystemTest {
 
   private GrpcServer grpcServer;
   private QueryRestApi restApi;
-  private DuckDbQueryEngine queryEngine;
   private SpanBuffer spanBuffer;
   private int grpcPort;
   private int restPort;
@@ -53,17 +50,20 @@ class MultiTraceSystemTest {
     grpcPort = 14317 + (int) (Math.random() * 1000);
     restPort = 18080 + (int) (Math.random() * 1000);
 
+    DuckLakeConfig duckLakeConfig =
+        new DuckLakeConfig(
+            tempDir.resolve("metadata.ducklake").toString(),
+            tempDir.resolve("files").toString() + "/");
+
     Injector injector =
         Guice.createInjector(
-            new StorageParquetModule(),
-            new LocalStorageModule(new StorageConfig(tempDir)),
+            new DuckLakeModule(duckLakeConfig),
             new IngestionCoreModule(new BatchConfig(100, Long.MAX_VALUE, Duration.ofHours(1))),
             new IngestionGrpcModule(grpcPort),
-            new QueryModule(QueryConfig.defaults(tempDir), restPort));
+            new QueryModule(QueryConfig.defaults(), restPort));
 
     grpcServer = injector.getInstance(GrpcServer.class);
     restApi = injector.getInstance(QueryRestApi.class);
-    queryEngine = injector.getInstance(DuckDbQueryEngine.class);
     spanBuffer = injector.getInstance(SpanBuffer.class);
 
     grpcServer.start();
@@ -75,7 +75,6 @@ class MultiTraceSystemTest {
     spanBuffer.shutdown();
     grpcServer.stop();
     restApi.stop();
-    queryEngine.close();
   }
 
   @Test
@@ -97,7 +96,6 @@ class MultiTraceSystemTest {
     }
 
     spanBuffer.flush();
-    queryEngine.refreshView();
 
     HttpClient httpClient = HttpClient.newHttpClient();
     ObjectMapper mapper = new ObjectMapper();

@@ -9,8 +9,7 @@ dependencies {
     implementation(libs.duckdb.jdbc)
     implementation(libs.slf4j.api)
 
-    testImplementation(project(":o3000y-storage-parquet"))
+    testImplementation(project(":o3000y-storage-ducklake"))
     testImplementation(project(":o3000y-testing-fixtures"))
-    testImplementation(libs.hadoop.common)
     testImplementation(libs.logback.classic)
 }
