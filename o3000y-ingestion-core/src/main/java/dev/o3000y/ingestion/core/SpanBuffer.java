@@ -5,6 +5,7 @@ import dev.o3000y.ingestion.api.SpanReceiver;
 import dev.o3000y.model.PipelineMetrics;
 import dev.o3000y.model.Span;
 import dev.o3000y.storage.api.StorageWriter;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.Executors;
@@ -54,6 +55,15 @@ public final class SpanBuffer implements SpanReceiver {
   public void receive(List<Span> spans) {
     long batchBytes = (long) spans.size() * estimateSpanSize(spans);
     metrics.recordReceive(spans.size());
+
+    Instant now = Instant.now();
+    for (Span span : spans) {
+      double delaySec =
+          (now.getEpochSecond() - span.startTime().getEpochSecond())
+              + (now.getNano() - span.startTime().getNano()) / 1_000_000_000.0;
+      metrics.recordIngestionDelay(Math.max(0.0, delaySec));
+    }
+
     LOG.debug("Received {} spans ({} bytes est.)", spans.size(), batchBytes);
 
     lock.lock();
