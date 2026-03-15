@@ -3,7 +3,7 @@ job "o3000y" {
   type        = "service"
 
   meta {
-    deployed_at = "2026-03-14T14:10:00Z"
+    deployed_at = "2026-03-15T04:00:00Z"
   }
 
   group "app" {
